@@ -75,7 +75,7 @@ function errText(e) {
   const msg = String(e?.message || "");
   const map = {
     invalid_credentials: "E-mail ili lozinka nisu ispravni.",
-    email_not_confirmed: "Prvo potvrdi e-mail adresu. Poveznicu smo ti poslali e-poštom.",
+    email_not_confirmed: "Prvo potvrdi e-mail adresu. Poveznicu smo ti poslali e-poštom. Ako je ne vidiš, provjeri neželjenu poštu.",
     user_already_exists: "Ova e-mail adresa je već registrirana. Prijavi se ili zatraži novu lozinku.",
     weak_password: "Lozinka je preslaba. Upotrijebi barem 8 znakova, s brojevima i slovima.",
     same_password: "Nova lozinka mora biti drukčija od stare.",
@@ -482,14 +482,14 @@ const views = {
 
   async registracija() {
     if (session) { location.hash = "#racun"; return; }
-    authPage("Registracija", "Besplatno. Ime koje upišeš vidjet će drugi uz tvoje objave.", [
+    authPage("Registracija", "Besplatno. Ime koje upišeš vidjet će drugi uz tvoje objave. Poslat ćemo ti e-poruku za potvrdu računa, pa provjeri i neželjenu poštu.", [
       { name: "ime", label: "Ime ili nadimak", type: "text", auto: "nickname", max: 60 },
       { name: "email", label: "E-mail", type: "email", auto: "email" },
       { name: "lozinka", label: "Lozinka", type: "password", auto: "new-password", min: 8, hint: "Najmanje 8 znakova." }],
       "Registriraj se", async (v, ok) => {
         const data = await q(sb.auth.signUp({ email: v.email, password: v.lozinka, options: { data: { ime: v.ime }, emailRedirectTo: location.origin + "/" } }));
         if (data.session) { location.hash = "#pocetna"; toast("Dobro došao na BisStage"); }
-        else ok("Poslali smo ti e-poruku. Klikni poveznicu u njoj da potvrdiš račun, a zatim se prijavi.");
+        else ok("Poslali smo ti e-poruku. Klikni poveznicu u njoj da potvrdiš račun, a zatim se prijavi. Ako poruku ne vidiš za nekoliko minuta, provjeri neželjenu poštu (Spam).");
       },
       [h("span", {}, "Već imaš račun? ", h("a", { href: "#prijava" }, "Prijavi se"))]);
   },
@@ -499,7 +499,7 @@ const views = {
       { name: "email", label: "E-mail", type: "email", auto: "email" }],
       "Pošalji poveznicu", async (v, ok) => {
         await q(sb.auth.resetPasswordForEmail(v.email, { redirectTo: location.origin + "/?reset=1" }));
-        ok("Ako postoji račun s tom adresom, poslali smo ti poveznicu.");
+        ok("Ako postoji račun s tom adresom, poslali smo ti poveznicu. Ako je ne vidiš, provjeri neželjenu poštu (Spam).");
       }, [h("a", { href: "#prijava" }, "Natrag na prijavu")], false);
   },
 
