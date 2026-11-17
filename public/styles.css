@@ -1,4 +1,7 @@
 /* BisStage: zajednica koja se otvara na crtovlju; četiri dijela su četiri note. */
+@font-face { font-family: "Bricolage Grotesque"; src: url("/fonts/bricolage.woff") format("woff"); font-weight: 500 800; font-display: swap; }
+@font-face { font-family: "Instrument Sans"; src: url("/fonts/instrument-sans.woff") format("woff"); font-weight: 400 600; font-display: swap; }
+@font-face { font-family: "JetBrains Mono"; src: url("/fonts/jetbrains-mono.woff") format("woff"); font-weight: 500 700; font-display: swap; }
 :root {
   --bg: #eef0f8; --surface: #fbfbfe; --fg: #15173c; --muted: #565a7c; --rule: #d3d6e8;
   --accent: #2a2fd6; --accent-fg: #ffffff; --accent-soft: #e0e2fb;
@@ -151,7 +154,16 @@ dialog h2 { font-size: 1.5rem; font-weight: 800; }
 .err { color: var(--bad); font-size: .92rem; min-height: 1.2em; }
 .toast { position: fixed; left: 50%; bottom: calc(20px + env(safe-area-inset-bottom, 0px)); transform: translateX(-50%); background: var(--fg); color: var(--bg); padding: 9px 14px; border-radius: 6px; font-weight: 600; font-size: .92rem; z-index: 20; max-width: calc(100vw - 32px); }
 footer { border-top: 1px solid var(--rule); color: var(--muted); font-size: .88rem; }
-footer .wrap { padding-block: 18px; }
+footer .wrap { padding-block: 18px; display: flex; flex-wrap: wrap; gap: 8px 24px; justify-content: space-between; }
+.foot-links { display: flex; flex-wrap: wrap; gap: 4px 16px; }
+.foot-links a { color: var(--muted); }
+.doc { max-width: 46em; display: grid; gap: 14px; }
+.doc h1 { font-size: clamp(2rem, 6vw, 2.8rem); font-weight: 800; letter-spacing: -.02em; }
+.doc h2 { font-size: 1.3rem; font-weight: 700; margin-top: 14px; }
+.doc ul { margin: 0; padding-left: 1.3em; display: grid; gap: 4px; }
+.doc .updated { color: var(--muted); font-size: .9rem; }
+.check { display: grid; grid-template-columns: auto minmax(0, 1fr); gap: 10px; align-items: start; font-size: .9rem; color: var(--fg); }
+.check input { width: 18px; height: 18px; margin-top: 2px; padding: 0; }
 
 @media (max-width: 720px) {
   .home, .gear { grid-template-columns: minmax(0, 1fr); }

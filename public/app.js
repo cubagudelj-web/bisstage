@@ -466,6 +466,10 @@ const views = {
         h("p", { class: "prose" }, r.tekst), h("div", { class: "actions" }, delBtn(r, () => q(sb.from("recenzije").delete().eq("id", r.id)))))) : [emptyBox("Još nema ocjena", "Budi prvi koji će ocijeniti ovaj model.")]));
   },
 
+  /* ---------------- Pravila ---------------- */
+  async privatnost() { legalPage(window.PRAVNO.privatnost); },
+  async uvjeti() { legalPage(window.PRAVNO.uvjeti); },
+
   /* ---------------- Računi ---------------- */
   async prijava() {
     if (session) { location.hash = "#racun"; return; }
@@ -491,7 +495,10 @@ const views = {
         if (data.session) { location.hash = "#pocetna"; toast("Dobro došao na BisStage"); }
         else ok("Poslali smo ti e-poruku. Klikni poveznicu u njoj da potvrdiš račun, a zatim se prijavi. Ako poruku ne vidiš za nekoliko minuta, provjeri neželjenu poštu (Spam).");
       },
-      [h("span", {}, "Već imaš račun? ", h("a", { href: "#prijava" }, "Prijavi se"))]);
+      [h("span", {}, "Već imaš račun? ", h("a", { href: "#prijava" }, "Prijavi se"))], true,
+      h("label", { class: "check", for: "a-uvjeti" }, h("input", { id: "a-uvjeti", name: "uvjeti", type: "checkbox", required: true }),
+        h("span", {}, "Imam najmanje 16 godina i prihvaćam ", h("a", { href: "#uvjeti", target: "_blank" }, "Uvjete korištenja"), " i ",
+          h("a", { href: "#privatnost", target: "_blank" }, "Pravila privatnosti"), ".")));
   },
 
   async ["zaboravljena-lozinka"]() {
@@ -530,6 +537,7 @@ const views = {
       } }, h("label", { class: "field", for: "r-ime" }, "Ime koje drugi vide", name), err, h("div", {}, save)),
       counts,
       me?.admin ? h("p", {}, h("span", { class: "tag" }, "Administrator"), " Možeš brisati sve objave.") : null,
+      h("p", {}, "Za brisanje računa i svih podataka piši na ", h("a", { href: "mailto:kontakt@bisstage.com" }, "kontakt@bisstage.com"), " s ove e-mail adrese."),
       h("div", { class: "actions" },
         h("a", { class: "btn quiet", href: "#zaboravljena-lozinka" }, "Promijeni lozinku"),
         h("button", { class: "btn danger", type: "button", onclick: async () => { await sb.auth.signOut(); location.hash = "#pocetna"; toast("Odjavljen si"); } }, "Odjavi se"))));
@@ -539,7 +547,18 @@ const views = {
   },
 };
 
-function authPage(title, text, fields, submitLabel, run, links = [], google = true) {
+function legalPage(d) {
+  const mail = t => {
+    const parts = String(t).split("kontakt@bisstage.com");
+    return parts.flatMap((x, i) => i ? [h("a", { href: "mailto:kontakt@bisstage.com" }, "kontakt@bisstage.com"), x] : [x]);
+  };
+  const block = x => Array.isArray(x) ? h("ul", {}, x.map(li => h("li", {}, mail(li)))) : h("p", {}, mail(x));
+  $("main").replaceChildren(h("article", { class: "doc" },
+    h("h1", {}, d.naslov), h("p", { class: "updated" }, "Posljednja izmjena: " + d.azurirano), h("p", {}, d.uvod),
+    d.odjeljci.flatMap(([title, ...rest]) => [h("h2", {}, title), ...rest.map(block)])));
+}
+
+function authPage(title, text, fields, submitLabel, run, links = [], google = true, extra = null) {
   const err = h("p", { class: "err", role: "alert" });
   const ok = h("p", { class: "ok", role: "status" });
   const send = submitLabel ? h("button", { class: "btn", type: "submit" }, submitLabel) : null;
@@ -552,7 +571,7 @@ function authPage(title, text, fields, submitLabel, run, links = [], google = tr
     try { await run(v, m => { ok.textContent = m; form.reset(); }); }
     catch (x) { console.error(x); err.textContent = errText(x); }
     send.disabled = false;
-  } }, inputs, err, ok, h("div", {}, send)) : null;
+  } }, inputs, extra, err, ok, h("div", {}, send)) : null;
   const g = google && CFG.googlePrijava ? [h("button", { class: "btn google", type: "button", onclick: async () => {
     const { error } = await sb.auth.signInWithOAuth({ provider: "google", options: { redirectTo: location.origin + "/" } });
     if (error) err.textContent = errText(error);
