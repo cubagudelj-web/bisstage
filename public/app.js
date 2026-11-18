@@ -637,7 +637,10 @@ function authPage(title, text, fields, submitLabel, run, links = [], google = tr
   const g = google && CFG.googlePrijava ? [h("button", { class: "btn google", type: "button", onclick: async () => {
     const { error } = await sb.auth.signInWithOAuth({ provider: "google", options: { redirectTo: location.origin + "/" } });
     if (error) err.textContent = errText(error);
-  } }, "Nastavi s Google računom"), h("div", { class: "or" }, "ili")] : [];
+  } }, "Nastavi s Google računom"),
+    h("p", { class: "hint" }, "Nastavkom s Google računom potvrđuješ da imaš najmanje 16 godina i prihvaćaš ", h("a", { href: "#uvjeti", target: "_blank" }, "Uvjete korištenja"), " i ",
+      h("a", { href: "#privatnost", target: "_blank" }, "Pravila privatnosti"), "."),
+    h("div", { class: "or" }, "ili")] : [];
   $("main").replaceChildren(h("div", { class: "auth" }, h("h1", {}, title), h("p", {}, text), ...g, form, h("div", { class: "actions" }, links)));
 }
 

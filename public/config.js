@@ -5,5 +5,5 @@ window.BISSTAGE = {
   supabaseUrl: "https://livgzretoteimhcwocvk.supabase.co",
   supabaseKey: "sb_publishable_NyRP3eh3NfSww1sM0yYh5w_ILarcC21",
   // Prebaci na true kad u Supabaseu uključiš Google prijavu.
-  googlePrijava: false,
+  googlePrijava: true,
 };
