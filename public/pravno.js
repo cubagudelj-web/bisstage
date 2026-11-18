@@ -86,7 +86,7 @@ window.PRAVNO = {
       ["Odgovornost",
         "BisStage se nudi besplatno, takav kakav jest. Trudimo se da stranica radi bez prekida i grešaka, ali to ne možemo jamčiti. U mjeri u kojoj to dopušta zakon, ne odgovaramo za štetu nastalu korištenjem stranice, prekidima u radu ili sadržajem koji objave korisnici."],
       ["Prijava neprimjerenog sadržaja",
-        "Ako uočiš sadržaj koji krši ove uvjete ili zakon, javi nam na kontakt@bisstage.com i navedi poveznicu ili naslov objave."],
+        "Ako uočiš sadržaj koji krši ove uvjete ili zakon, klikni gumb Prijavi uz tu objavu. Možeš nam pisati i na kontakt@bisstage.com, uz poveznicu ili naslov objave."],
       ["Brisanje računa",
         "Svoj račun možeš izbrisati u svakom trenutku. Zahtjev pošalji na kontakt@bisstage.com s e-mail adrese kojom si registriran. Brisanjem računa brišu se i sve tvoje objave."],
       ["Izmjene uvjeta",

@@ -24,7 +24,7 @@ let sb = null;
 let session = null;
 let me = null; // { id, ime, admin }
 let navToken = 0;
-const filters = { oglasi: { q: "", cat: "", drzava: "" }, poslovi: { q: "", vrsta: "", drzava: "" }, forum: { kat: "" }, ocjene: { q: "", kat: "" } };
+const filters = { prijave: { tab: "otvorene" }, oglasi: { q: "", cat: "", drzava: "" }, poslovi: { q: "", vrsta: "", drzava: "" }, forum: { kat: "" }, ocjene: { q: "", kat: "" } };
 const open = new Set();
 const nameCache = new Map();
 
@@ -300,13 +300,30 @@ function adBody(o) {
     h("p", {}, o.opis), contact(o),
     h("div", { class: "actions" },
       canEdit(o) ? h("button", { class: "btn small quiet", type: "button", onclick: () => oglasForm(o) }, "Uredi") : null,
-      delBtn(o, async () => { await removeSlike(o.slike); await q(sb.from("oglasi").delete().eq("id", o.id)); })),
+      delBtn(o, async () => { await removeSlike(o.slike); await q(sb.from("oglasi").delete().eq("id", o.id)); }),
+      reportBtn("oglas", o, "#oglas-" + o.id, o.naslov)),
   ];
 }
+const RAZLOZI = ["Spam ili reklama", "Prijevara ili lažna objava", "Uvredljiv sadržaj", "Nezakonit sadržaj", "Ne pripada ovdje", "Drugo"];
+function reportBtn(vrsta, item, poveznica, naslov) {
+  if (me && item.autor === me.id) return null;
+  return h("button", { class: "btn small quiet report", type: "button", onclick: () => {
+    if (needLogin()) return;
+    openForm({ title: "Prijavi objavu", submit: "Pošalji prijavu", done: "Hvala, prijava je poslana",
+      fields: [{ name: "razlog", label: "Razlog", options: RAZLOZI, placeholder: "Odaberi", required: true },
+        { name: "napomena", label: "Napomena (nije obavezno)", type: "textarea", max: 500, hint: "Što nije u redu s ovom objavom?" }],
+      save: async v => {
+        try { await q(sb.from("prijave").insert({ vrsta, objekt: item.id, poveznica, naslov: String(naslov || "Objava").slice(0, 200), razlog: v.razlog, napomena: v.napomena || null })); }
+        catch (e) { if (e?.code === "23505") throw new UserError("Ovu si objavu već prijavio. Administrator će je pregledati."); throw e; }
+      } });
+  } }, "Prijavi");
+}
+
 function jobBody(o) {
   return [h("p", {}, o.opis), contact(o), h("div", { class: "actions" },
     canEdit(o) ? h("button", { class: "btn small quiet", type: "button", onclick: () => posaoForm(o) }, "Uredi") : null,
-    delBtn(o, () => q(sb.from("poslovi").delete().eq("id", o.id))))];
+    delBtn(o, () => q(sb.from("poslovi").delete().eq("id", o.id))),
+    reportBtn("posao", o, "#posao-" + o.id, o.naslov))];
 }
 
 /* ------------------------------------------------------------------ */
@@ -337,8 +354,8 @@ const views = {
     await loadNames([...og, ...po, ...te].map(x => x.autor));
     if (!alive()) return;
     ["oglasi", "poslovi", "teme", "oprema"].forEach((k, i) => { const el = document.querySelector(`[data-c="${k}"]`); if (el) el.textContent = counts[i]; });
-    fill(a, og.map(o => adRow(o, "a", "#oglasi")), emptyBox("Još nema oglasa", "Objavi prvi oglas u Oglasniku."));
-    fill(j, po.map(o => jobRow(o, "a", "#poslovi")), emptyBox("Još nema poslova", "Objavi prvi posao na Burzi poslova."));
+    fill(a, og.map(o => adRow(o, "a", "#oglas-" + o.id)), emptyBox("Još nema oglasa", "Objavi prvi oglas u Oglasniku."));
+    fill(j, po.map(o => jobRow(o, "a", "#posao-" + o.id)), emptyBox("Još nema poslova", "Objavi prvi posao na Burzi poslova."));
     fill(t, te.map(threadRow), emptyBox("Još nema tema", "Otvori prvu temu na Forumu."));
     fill(g, op.map(gearCard), emptyBox("Još nema ocjena", "Dodaj opremu u Ocjenama opreme."));
   },
@@ -399,7 +416,7 @@ const views = {
     await loadNames([t.autor, ...rs.map(r => r.autor)]);
     if (!alive()) return;
     box.replaceChildren(metaHead(t.naslov, [h("span", {}, t.kategorija), h("span", {}, nameOf(t.autor)), h("span", {}, date(t.created_at))]),
-      h("article", { class: "post" }, h("p", { class: "prose" }, t.tekst), h("div", { class: "actions" }, delBtn(t, async () => { await q(sb.from("teme").delete().eq("id", t.id)); location.hash = "#forum"; }))));
+      h("article", { class: "post" }, h("p", { class: "prose" }, t.tekst), h("div", { class: "actions" }, delBtn(t, async () => { await q(sb.from("teme").delete().eq("id", t.id)); location.hash = "#forum"; }), reportBtn("tema", t, "#tema-" + t.id, t.naslov))));
     let form;
     if (session) {
       const ta = h("textarea", { id: "reply-text", required: true, maxlength: 3000 });
@@ -415,7 +432,7 @@ const views = {
     }
     list.replaceChildren(h("h2", {}, plural(rs.length, "odgovor", "odgovora", "odgovora")),
       ...rs.map(r => h("article", { class: "post" }, h("div", { class: "meta" }, h("span", {}, nameOf(r.autor)), h("span", {}, date(r.created_at))), h("p", { class: "prose" }, r.tekst),
-        h("div", { class: "actions" }, delBtn(r, () => q(sb.from("odgovori").delete().eq("id", r.id)))))), form);
+        h("div", { class: "actions" }, delBtn(r, () => q(sb.from("odgovori").delete().eq("id", r.id))), reportBtn("odgovor", r, "#tema-" + t.id, "Odgovor u temi: " + t.naslov)))), form);
   },
 
   async ocjene(_, alive) {
@@ -459,11 +476,56 @@ const views = {
         } });
     };
     box.replaceChildren(metaHead(g.naziv, [h("span", {}, g.kategorija)], h("button", { class: "btn", type: "button", onclick: rate }, mine ? "Promijeni ocjenu" : "Ocijeni")),
-      h("div", { class: "post" }, scoreBox(g), bars(g), h("div", { class: "actions" }, delBtn(g, async () => { await q(sb.from("oprema").delete().eq("id", g.id)); location.hash = "#ocjene"; }))));
+      h("div", { class: "post" }, scoreBox(g), bars(g), h("div", { class: "actions" }, delBtn(g, async () => { await q(sb.from("oprema").delete().eq("id", g.id)); location.hash = "#ocjene"; }), reportBtn("oprema", g, "#oprema-" + g.id, g.naziv))));
     list.replaceChildren(h("h2", {}, "Iskustva korisnika"),
       ...(rs.length ? rs.map(r => h("article", { class: "post" },
         h("div", { class: "meta" }, h("span", {}, nameOf(r.autor)), h("span", {}, date(r.created_at)), ...CRIT.map(([k, l]) => h("span", {}, `${l} ${r[k]}/5`))),
-        h("p", { class: "prose" }, r.tekst), h("div", { class: "actions" }, delBtn(r, () => q(sb.from("recenzije").delete().eq("id", r.id)))))) : [emptyBox("Još nema ocjena", "Budi prvi koji će ocijeniti ovaj model.")]));
+        h("p", { class: "prose" }, r.tekst), h("div", { class: "actions" }, delBtn(r, () => q(sb.from("recenzije").delete().eq("id", r.id))), reportBtn("recenzija", r, "#oprema-" + g.id, "Ocjena za: " + g.naziv)))) : [emptyBox("Još nema ocjena", "Budi prvi koji će ocijeniti ovaj model.")]));
+  },
+
+  async oglas(id, alive) {
+    $("main").replaceChildren(h("a", { class: "back", href: "#oglasi" }, "Natrag na oglasnik"), loading());
+    const [o] = await q(sb.from("oglasi").select(session ? OGLAS_JAVNO + ",kontakt" : OGLAS_JAVNO).eq("id", id).limit(1));
+    if (o) await loadNames([o.autor]);
+    if (!alive()) return;
+    $("main").replaceChildren(h("a", { class: "back", href: "#oglasi" }, "Natrag na oglasnik"), !o ? emptyBox("Ovaj oglas više ne postoji", "Možda je prodano. Pogledaj ostale oglase.") :
+      h("div", { class: "stack" }, metaHead(o.naslov, [h("span", {}, o.kategorija), h("span", {}, o.stanje), h("span", {}, place(o)), h("span", {}, nameOf(o.autor)), h("span", {}, date(o.created_at))], h("div", { class: "value big" }, price(o))),
+        h("article", { class: "post" }, adBody(o))));
+  },
+
+  async posao(id, alive) {
+    $("main").replaceChildren(h("a", { class: "back", href: "#poslovi" }, "Natrag na burzu poslova"), loading());
+    const [o] = await q(sb.from("poslovi").select(session ? POSAO_JAVNO + ",kontakt" : POSAO_JAVNO).eq("id", id).limit(1));
+    if (o) await loadNames([o.autor]);
+    if (!alive()) return;
+    $("main").replaceChildren(h("a", { class: "back", href: "#poslovi" }, "Natrag na burzu poslova"), !o ? emptyBox("Ovaj posao više ne postoji", "Pogledaj ostale poslove.") :
+      h("div", { class: "stack" }, metaHead(o.naslov, [h("span", {}, o.vrsta), h("span", {}, place(o)), o.rok ? h("span", {}, "Rok: " + day(o.rok)) : null, h("span", {}, nameOf(o.autor)), h("span", {}, date(o.created_at))], h("div", { class: "value big" }, o.honorar || "Po dogovoru")),
+        h("article", { class: "post" }, jobBody(o))));
+  },
+
+  async prijave(_, alive) {
+    if (!me?.admin) { location.hash = "#pocetna"; return; }
+    const st = filters.prijave, list = h("div", { class: "stack" }, loading()), chips = h("div", { class: "chips" });
+    $("main").replaceChildren(pageHead("Prijave", "Objave koje su korisnici prijavili. Otvori objavu, izbriši je ako krši pravila i označi prijavu kao riješenu."), chips, list);
+    const rows = await q(sb.from("prijave").select("*").order("created_at", { ascending: false }).limit(LIMIT));
+    await loadNames(rows.map(r => r.autor));
+    if (!alive()) return;
+    const solve = (r, val) => async () => { try { await q(sb.from("prijave").update({ rijeseno: val }).eq("id", r.id)); await updateReportCount(); refresh(); } catch (e) { toast(errText(e)); } };
+    redraw = () => {
+      const open = rows.filter(r => !r.rijeseno).length;
+      chips.replaceChildren(...[["otvorene", `Otvorene (${open})`], ["rijesene", `Riješene (${rows.length - open})`]].map(([k, l]) =>
+        h("button", { class: "chip", type: "button", "aria-pressed": String(st.tab === k), onclick: () => { st.tab = k; redraw(); } }, l)));
+      const shown = rows.filter(r => st.tab === "rijesene" ? r.rijeseno : !r.rijeseno);
+      fill(list, shown.map(r => h("article", { class: "post" },
+        h("div", { class: "meta" }, h("span", { class: "tag" }, r.vrsta), h("span", {}, r.razlog), h("span", {}, "prijavio: " + nameOf(r.autor)), h("span", {}, date(r.created_at))),
+        h("h3", {}, r.naslov),
+        r.napomena ? h("p", { class: "prose" }, r.napomena) : null,
+        h("div", { class: "actions" }, h("a", { class: "btn small", href: r.poveznica }, "Otvori objavu"),
+          r.rijeseno ? h("button", { class: "btn small quiet", type: "button", onclick: solve(r, false) }, "Vrati u otvorene")
+            : h("button", { class: "btn small quiet", type: "button", onclick: solve(r, true) }, "Označi riješeno")))),
+        emptyBox(st.tab === "rijesene" ? "Nema riješenih prijava" : "Nema otvorenih prijava", st.tab === "rijesene" ? "" : "Sve je u redu."));
+    };
+    redraw();
   },
 
   /* ---------------- Pravila ---------------- */
@@ -536,7 +598,7 @@ const views = {
         save.disabled = false;
       } }, h("label", { class: "field", for: "r-ime" }, "Ime koje drugi vide", name), err, h("div", {}, save)),
       counts,
-      me?.admin ? h("p", {}, h("span", { class: "tag" }, "Administrator"), " Možeš brisati sve objave.") : null,
+      me?.admin ? h("p", {}, h("span", { class: "tag" }, "Administrator"), " Možeš brisati sve objave. ", h("a", { href: "#prijave" }, reportCount ? `Otvorene prijave: ${reportCount}` : "Pregled prijava")) : null,
       h("p", {}, "Za brisanje računa i svih podataka piši na ", h("a", { href: "mailto:kontakt@bisstage.com" }, "kontakt@bisstage.com"), " s ove e-mail adrese."),
       h("div", { class: "actions" },
         h("a", { class: "btn quiet", href: "#zaboravljena-lozinka" }, "Promijeni lozinku"),
@@ -582,13 +644,13 @@ function authPage(title, text, fields, submitLabel, run, links = [], google = tr
 /* ------------------------------------------------------------------ */
 /* Usmjeravanje i pokretanje                                           */
 /* ------------------------------------------------------------------ */
-const NAV_OF = { tema: "forum", oprema: "ocjene", prijava: "account", registracija: "account", racun: "account" };
+const NAV_OF = { tema: "forum", oprema: "ocjene", oglas: "oglasi", posao: "poslovi", prijava: "account", registracija: "account", racun: "account", prijave: "account" };
 
 async function route(keepScroll) {
   const token = ++navToken;
   const alive = () => token === navToken;
   const raw = location.hash.slice(1) || "pocetna";
-  const m = raw.match(/^(tema|oprema)-([0-9a-f-]{36})$/);
+  const m = raw.match(/^(tema|oprema|oglas|posao)-([0-9a-f-]{36})$/);
   const name = m ? m[1] : views[raw] ? raw : "pocetna";
   redraw = () => {};
   if (name !== "pocetna") $("hero").replaceChildren();
@@ -611,9 +673,16 @@ async function loadMe() {
   me = rows[0] || { id: session.user.id, ime: "Član", admin: false };
   nameCache.set(me.id, me.ime);
 }
+let reportCount = 0;
+async function updateReportCount() {
+  if (!me?.admin) { reportCount = 0; return; }
+  const { count } = await sb.from("prijave").select("id", { count: "exact", head: true }).eq("rijeseno", false);
+  reportCount = count || 0;
+  renderAccount();
+}
 function renderAccount() {
   const a = $("account");
-  if (session) { a.textContent = me?.ime || "Moj račun"; a.href = "#racun"; }
+  if (session) { a.textContent = (me?.ime || "Moj račun") + (reportCount ? " · " + plural(reportCount, "prijava", "prijave", "prijava") : ""); a.href = reportCount ? "#prijave" : "#racun"; }
   else { a.textContent = "Prijava"; a.href = "#prijava"; }
 }
 
@@ -630,12 +699,14 @@ async function boot() {
   if (params.get("error_description")) toast("Poveznica nije valjana ili je istekla. Zatraži novu.");
   await loadMe();
   renderAccount();
+  updateReportCount().catch(() => {});
   sb.auth.onAuthStateChange((event, s) => {
     if (event === "INITIAL_SESSION" || event === "TOKEN_REFRESHED") { session = s; return; }
     setTimeout(async () => {
       session = s;
       await loadMe();
       renderAccount();
+      updateReportCount().catch(() => {});
       if (event === "PASSWORD_RECOVERY") { location.hash = "#nova-lozinka"; return; }
       if (event === "SIGNED_IN" || event === "SIGNED_OUT" || event === "USER_UPDATED") refresh();
     }, 0);

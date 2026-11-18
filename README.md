@@ -18,6 +18,7 @@ Tajni ključ (`sb_secret_` ili `service_role`) nikada ne ide u ovaj repozitorij.
 ### 1. Baza (Supabase)
 1. Supabase → **SQL Editor** → **New query**.
 2. Zalijepi cijeli sadržaj `supabase/schema.sql` i klikni **Run**. Pokreće se samo jednom.
+3. Na isti način, jednom, pokreni i `supabase/02-prijave.sql` (prijave neprimjerenih objava).
 
 ### 2. Adrese za prijavu (Supabase)
 **Authentication → URL Configuration**:
@@ -37,4 +38,4 @@ Administrator može brisati sve objave.
 - **E-pošta:** Supabaseova ugrađena e-pošta šalje samo članovima tvog Supabase tima i najviše nekoliko poruka na sat. Za prave korisnike postavi vlastiti SMTP (Authentication → Emails → SMTP Settings).
 - **Google prijava:** uključi je u Authentication → Sign In / Providers → Google, zatim u `public/config.js` postavi `googlePrijava: true`.
 - **Pravila privatnosti i uvjeti korištenja** (GDPR).
-- **Prijava neprimjerenih objava** i zaštita od spama.
+- Zaštita od spama.
