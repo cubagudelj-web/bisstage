@@ -19,6 +19,7 @@ Tajni ključ (`sb_secret_` ili `service_role`) nikada ne ide u ovaj repozitorij.
 1. Supabase → **SQL Editor** → **New query**.
 2. Zalijepi cijeli sadržaj `supabase/schema.sql` i klikni **Run**. Pokreće se samo jednom.
 3. Na isti način, jednom, pokreni i `supabase/02-prijave.sql` (prijave neprimjerenih objava).
+4. Zatim, jednom, `supabase/03-istaknuto.sql` (istaknuti oglasi i poslovi).
 
 ### 2. Adrese za prijavu (Supabase)
 **Authentication → URL Configuration**:

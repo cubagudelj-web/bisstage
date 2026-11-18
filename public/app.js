@@ -14,8 +14,8 @@ const CRIT = [["zvuk", "Zvuk"], ["izrada", "Izrada"], ["vrijednost", "Vrijednost
 const MAX_SLIKA = 4;
 const LIMIT = 300;
 
-const OGLAS_JAVNO = "id,autor,naslov,kategorija,stanje,cijena,valuta,grad,drzava,opis,slike,created_at";
-const POSAO_JAVNO = "id,autor,naslov,vrsta,honorar,grad,drzava,rok,opis,created_at";
+const OGLAS_JAVNO = "id,autor,naslov,kategorija,stanje,cijena,valuta,grad,drzava,opis,slike,istaknut_od,istaknut_do,created_at";
+const POSAO_JAVNO = "id,autor,naslov,vrsta,honorar,grad,drzava,rok,opis,istaknut_od,istaknut_do,created_at";
 
 /* ------------------------------------------------------------------ */
 /* Stanje                                                              */
@@ -87,6 +87,7 @@ function errText(e) {
     "23514": "Neko polje nije ispravno popunjeno. Provjeri duljinu teksta i odabrane vrijednosti.",
     "42501": "Nemaš dozvolu za ovu radnju. Prijavi se ponovo.",
   };
+  if (code === "P0001" && msg) return msg;
   if (map[code]) return map[code];
   if (/Invalid login credentials/i.test(msg)) return map.invalid_credentials;
   if (/Email not confirmed/i.test(msg)) return map.email_not_confirmed;
@@ -279,12 +280,38 @@ function thumb(o) {
   if (o.slike?.length) return h("img", { class: "thumb", src: imgUrl(o.slike[0]), alt: "", loading: "lazy", width: 56, height: 56 });
   return h("span", { class: "thumb", "aria-hidden": "true" }, o.kategorija?.[0] || "♪");
 }
-const adRow = (o, tag = "summary", href) => h(tag, { class: "row thumbed", href }, thumb(o), h("h3", {}, o.naslov),
+const featured = o => !!o.istaknut_do && new Date(o.istaknut_do) > new Date();
+const featTag = o => featured(o) ? h("span", { class: "tag feat" }, "Istaknuto") : null;
+const featFirst = rows => [...rows].sort((a, b) => (featured(b) - featured(a)) || (featured(a) && featured(b) ? new Date(b.istaknut_od) - new Date(a.istaknut_od) : 0));
+async function withFeatured(tbl, cols, rows) {
+  const feat = await q(sb.from(tbl).select(cols).gt("istaknut_do", new Date().toISOString()).order("istaknut_od", { ascending: false }).limit(50));
+  const ids = new Set(rows.map(r => r.id));
+  return featFirst([...feat.filter(f => !ids.has(f.id)), ...rows]);
+}
+function featureBtns(tbl, o) {
+  const label = tbl === "oglasi" ? "oglas" : "posao";
+  const until = featured(o) ? h("span", { class: "tag feat" }, "Istaknuto do " + date(o.istaknut_do)) : null;
+  const run = async dana => {
+    const d = await q(sb.rpc("istakni", { tablica: tbl, objekt: o.id, dana }));
+    toast(d ? `Istaknuto do ${date(d)}` : "Isticanje je uklonjeno");
+    refresh();
+  };
+  const own = canEdit(o) && !featured(o) ? h("button", { class: "btn small feat-btn", type: "button", onclick: async e => {
+    const btn = e.currentTarget; btn.disabled = true;
+    try { await run(7); } catch (x) { toast(errText(x)); btn.disabled = false; }
+  } }, `Istakni ${label} na 7 dana · besplatno`) : null;
+  const admin = me?.admin ? h("button", { class: "btn small quiet", type: "button", onclick: () => openForm({
+    title: "Isticanje (administrator)", submit: "Spremi", done: "Spremljeno",
+    fields: [{ name: "dana", label: "Trajanje", required: true, options: [["7", "7 dana"], ["14", "14 dana"], ["30", "30 dana"], ["0", "Ukloni isticanje"]] }],
+    save: async v => { const d = await q(sb.rpc("istakni", { tablica: tbl, objekt: o.id, dana: Number(v.dana) })); return d; } }) }, "Isticanje") : null;
+  return [until, own, admin];
+}
+const adRow = (o, tag = "summary", href) => h(tag, { class: "row thumbed" + (featured(o) ? " featured" : ""), href }, thumb(o), h("h3", {}, o.naslov),
   h("div", { class: "value" }, price(o)),
-  h("div", { class: "meta" }, h("span", {}, o.kategorija), h("span", {}, o.stanje), h("span", {}, place(o)), h("span", {}, nameOf(o.autor)), h("span", {}, date(o.created_at))));
-const jobRow = (o, tag = "summary", href) => h(tag, { class: "row", href }, h("h3", {}, o.naslov),
+  h("div", { class: "meta" }, featTag(o), h("span", {}, o.kategorija), h("span", {}, o.stanje), h("span", {}, place(o)), h("span", {}, nameOf(o.autor)), h("span", {}, date(o.created_at))));
+const jobRow = (o, tag = "summary", href) => h(tag, { class: "row" + (featured(o) ? " featured" : ""), href }, h("h3", {}, o.naslov),
   h("div", { class: "value" }, o.honorar || "Po dogovoru"),
-  h("div", { class: "meta" }, h("span", {}, o.vrsta), h("span", {}, place(o)), o.rok ? h("span", {}, "Rok: " + day(o.rok)) : null, h("span", {}, nameOf(o.autor)), h("span", {}, date(o.created_at))));
+  h("div", { class: "meta" }, featTag(o), h("span", {}, o.vrsta), h("span", {}, place(o)), o.rok ? h("span", {}, "Rok: " + day(o.rok)) : null, h("span", {}, nameOf(o.autor)), h("span", {}, date(o.created_at))));
 const threadRow = t => h("a", { class: "row", href: "#tema-" + t.id }, h("h3", {}, t.naslov),
   h("div", { class: "value" }, String(t.broj_odgovora ?? 0), h("small", {}, "odg.")),
   h("div", { class: "meta" }, h("span", {}, t.kategorija), h("span", {}, nameOf(t.autor)), h("span", {}, date(t.created_at))));
@@ -300,6 +327,7 @@ function adBody(o) {
       h("img", { src: imgUrl(p), alt: o.naslov, loading: "lazy" })))) : null,
     h("p", {}, o.opis), contact(o),
     h("div", { class: "actions" },
+      ...featureBtns("oglasi", o),
       canEdit(o) ? h("button", { class: "btn small quiet", type: "button", onclick: () => oglasForm(o) }, "Uredi") : null,
       delBtn(o, async () => { await removeSlike(o.slike); await q(sb.from("oglasi").delete().eq("id", o.id)); }),
       reportBtn("oglas", o, "#oglas-" + o.id, o.naslov)),
@@ -401,6 +429,7 @@ function bandFx(canvas) {
 
 function jobBody(o) {
   return [h("p", {}, o.opis), contact(o), h("div", { class: "actions" },
+    ...featureBtns("poslovi", o),
     canEdit(o) ? h("button", { class: "btn small quiet", type: "button", onclick: () => posaoForm(o) }, "Uredi") : null,
     delBtn(o, () => q(sb.from("poslovi").delete().eq("id", o.id))),
     reportBtn("posao", o, "#posao-" + o.id, o.naslov))];
@@ -424,18 +453,25 @@ const views = {
     bandFx(fx);
     const box = (title, href, cls = "rows") => { const list = h("div", { class: cls }, loading()); return [list, h("section", {}, h("h2", {}, title, h("a", { href: "#" + href }, "Sve")), list)]; };
     const [a, as] = box("Novi oglasi", "oglasi"), [j, js] = box("Novi poslovi", "poslovi"), [t, ts] = box("Na forumu", "forum"), [g, gs] = box("Najbolje ocijenjeno", "ocjene", "stack");
-    $("main").replaceChildren(h("div", { class: "home" }, as, js, ts, gs));
+    const featList = h("div", { class: "feat-grid" });
+    const featSec = h("section", { class: "feat-sec", hidden: true }, h("h2", {}, "Istaknuti oglasi", h("a", { href: "#oglasi" }, "Svi oglasi")), featList);
+    $("main").replaceChildren(featSec, h("div", { class: "home" }, as, js, ts, gs));
 
     const newest = (tbl, cols, n = 3) => q(sb.from(tbl).select(cols).order("created_at", { ascending: false }).limit(n));
     const count = tbl => sb.from(tbl).select("id", { count: "exact", head: true }).then(r => r.count ?? "–");
-    const [og, po, te, op, ...counts] = await Promise.all([
+    const [og, po, te, ft, op, ...counts] = await Promise.all([
       newest("oglasi", OGLAS_JAVNO), newest("poslovi", POSAO_JAVNO), newest("teme_pregled", "*"),
+      q(sb.from("oglasi").select(OGLAS_JAVNO).gt("istaknut_do", new Date().toISOString()).order("istaknut_od", { ascending: false }).limit(4)),
       q(sb.from("oprema_pregled").select("*").gt("broj_ocjena", 0).order("prosjek", { ascending: false }).limit(2)),
       count("oglasi"), count("poslovi"), count("teme"), count("oprema"),
     ]);
-    await loadNames([...og, ...po, ...te].map(x => x.autor));
+    await loadNames([...og, ...po, ...te, ...ft].map(x => x.autor));
     if (!alive()) return;
     ["oglasi", "poslovi", "teme", "oprema"].forEach((k, i) => { const el = document.querySelector(`[data-c="${k}"]`); if (el) el.textContent = counts[i]; });
+    featSec.hidden = !ft.length;
+    featList.replaceChildren(...ft.map(o => h("a", { class: "feat-card", href: "#oglas-" + o.id },
+      o.slike?.length ? h("img", { src: imgUrl(o.slike[0]), alt: "", loading: "lazy" }) : h("span", { class: "feat-ph", "aria-hidden": "true" }, "♪"),
+      h("span", { class: "tag feat" }, "Istaknuto"), h("strong", {}, o.naslov), h("span", { class: "value" }, price(o)), h("span", { class: "meta" }, place(o)))));
     fill(a, og.map(o => adRow(o, "a", "#oglas-" + o.id)), emptyBox("Još nema oglasa", "Objavi prvi oglas u Oglasniku."));
     fill(j, po.map(o => jobRow(o, "a", "#posao-" + o.id)), emptyBox("Još nema poslova", "Objavi prvi posao na Burzi poslova."));
     fill(t, te.map(threadRow), emptyBox("Još nema tema", "Otvori prvu temu na Forumu."));
@@ -448,7 +484,8 @@ const views = {
       pageHead("Oglasnik", "Instrumenti i oprema, novi i rabljeni.", h("button", { class: "btn", type: "button", onclick: () => oglasForm() }, "Objavi oglas")),
       h("div", { class: "tools" }, search("q-oglasi", "Pretraži", st, "npr. tambura, Split"), pick("c-oglasi", "Kategorija", st, "cat", CATS), pick("d-oglasi", "Država", st, "drzava", COUNTRIES)),
       list);
-    const rows = await q(sb.from("oglasi").select(session ? OGLAS_JAVNO + ",kontakt" : OGLAS_JAVNO).order("created_at", { ascending: false }).limit(LIMIT));
+    const cols = session ? OGLAS_JAVNO + ",kontakt" : OGLAS_JAVNO;
+    const rows = await withFeatured("oglasi", cols, await q(sb.from("oglasi").select(cols).order("created_at", { ascending: false }).limit(LIMIT)));
     await loadNames(rows.map(r => r.autor));
     if (!alive()) return;
     redraw = () => fill(list, rows.filter(o => (!st.cat || o.kategorija === st.cat) && (!st.drzava || o.drzava === st.drzava) && hit(st.q, o.naslov, o.opis, o.grad))
@@ -462,7 +499,8 @@ const views = {
       pageHead("Burza poslova", "Svirke, angažmani, snimanja, poduka i bendovi koji traže člana.", h("button", { class: "btn", type: "button", onclick: () => posaoForm() }, "Objavi posao")),
       h("div", { class: "tools" }, search("q-poslovi", "Pretraži", st, "npr. bubnjar, Zagreb"), pick("v-poslovi", "Vrsta", st, "vrsta", JOBS), pick("d-poslovi", "Država", st, "drzava", COUNTRIES)),
       list);
-    const rows = await q(sb.from("poslovi").select(session ? POSAO_JAVNO + ",kontakt" : POSAO_JAVNO).order("created_at", { ascending: false }).limit(LIMIT));
+    const cols = session ? POSAO_JAVNO + ",kontakt" : POSAO_JAVNO;
+    const rows = await withFeatured("poslovi", cols, await q(sb.from("poslovi").select(cols).order("created_at", { ascending: false }).limit(LIMIT)));
     await loadNames(rows.map(r => r.autor));
     if (!alive()) return;
     redraw = () => fill(list, rows.filter(o => (!st.vrsta || o.vrsta === st.vrsta) && (!st.drzava || o.drzava === st.drzava) && hit(st.q, o.naslov, o.opis, o.grad))
