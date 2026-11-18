@@ -296,7 +296,8 @@ const fill = (el, items, emptyEl) => el.replaceChildren(...(items.length ? items
 
 function adBody(o) {
   return [
-    o.slike?.length ? h("div", { class: "gallery" }, o.slike.map(p => h("a", { href: imgUrl(p), target: "_blank", rel: "noopener" }, h("img", { src: imgUrl(p), alt: o.naslov, loading: "lazy" })))) : null,
+    o.slike?.length ? h("div", { class: "gallery" }, o.slike.map((p, i) => h("button", { type: "button", class: "thumb-btn", "aria-label": `Otvori fotografiju ${i + 1} od ${o.slike.length}`, onclick: () => openGallery(o.slike, i, o.naslov) },
+      h("img", { src: imgUrl(p), alt: o.naslov, loading: "lazy" })))) : null,
     h("p", {}, o.opis), contact(o),
     h("div", { class: "actions" },
       canEdit(o) ? h("button", { class: "btn small quiet", type: "button", onclick: () => oglasForm(o) }, "Uredi") : null,
@@ -317,6 +318,32 @@ function reportBtn(vrsta, item, poveznica, naslov) {
         catch (e) { if (e?.code === "23505") throw new UserError("Ovu si objavu već prijavio. Administrator će je pregledati."); throw e; }
       } });
   } }, "Prijavi");
+}
+
+function openGallery(paths, start, title) {
+  const dlg = $("dlg");
+  let i = start, x0 = null;
+  const img = h("img", { class: "lb-img", alt: title });
+  const count = h("span", { class: "lb-count" });
+  const show = () => { img.src = imgUrl(paths[i]); count.textContent = `${i + 1} / ${paths.length}`; };
+  const go = d => { i = (i + d + paths.length) % paths.length; show(); };
+  const many = paths.length > 1;
+  const stage = h("div", { class: "lb-stage",
+    ontouchstart: e => { x0 = e.touches[0].clientX; },
+    ontouchend: e => { if (x0 == null || !many) return; const dx = e.changedTouches[0].clientX - x0; if (Math.abs(dx) > 40) go(dx < 0 ? 1 : -1); x0 = null; } },
+    img,
+    many ? h("button", { class: "lb-nav lb-prev", type: "button", "aria-label": "Prethodna fotografija", onclick: () => go(-1) }, "‹") : null,
+    many ? h("button", { class: "lb-nav lb-next", type: "button", "aria-label": "Sljedeća fotografija", onclick: () => go(1) }, "›") : null);
+  const bar = h("div", { class: "lb-bar" }, h("span", { class: "lb-title" }, title), many ? count : null,
+    h("button", { class: "lb-close", type: "button", "aria-label": "Zatvori", onclick: () => dlg.close() }, "×"));
+  const onKey = e => { if (!many) return; if (e.key === "ArrowLeft") go(-1); if (e.key === "ArrowRight") go(1); };
+  dlg.replaceChildren(bar, stage);
+  dlg.classList.add("lightbox");
+  dlg.addEventListener("keydown", onKey);
+  dlg.addEventListener("close", () => { dlg.classList.remove("lightbox"); dlg.removeEventListener("keydown", onKey); }, { once: true });
+  dlg.addEventListener("click", e => { if (e.target === dlg) dlg.close(); }, { once: true });
+  show();
+  dlg.showModal();
 }
 
 function jobBody(o) {
