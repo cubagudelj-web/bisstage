@@ -847,6 +847,7 @@ async function route(keepScroll) {
   const m = raw.match(/^(tema|oprema|oglas|posao)\/([0-9a-f-]{36})$/);
   const name = m ? m[1] : views[raw] ? raw : "pocetna";
   redraw = () => {};
+  if (!keepScroll) open.clear(); // prelaskom na drugi dio stranice otvoreni oglasi se zatvaraju
   setTitle(null);
   if (name !== "pocetna") $("hero").replaceChildren();
   const navName = NAV_OF[name] || name;
