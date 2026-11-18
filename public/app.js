@@ -114,8 +114,8 @@ const nameOf = id => nameCache.get(id) || "Član";
 
 function needLogin() {
   if (session) return false;
-  try { sessionStorage.setItem("povratak", location.hash || "#pocetna"); } catch {}
-  location.hash = "#prijava";
+  try { sessionStorage.setItem("povratak", location.pathname); } catch {}
+  go("/prijava");
   toast("Za ovo se prvo prijavi");
   return true;
 }
@@ -261,7 +261,7 @@ function pick(id, label, st, key, opts) {
     h("option", { value: "" }, "Sve"), opts.map(o => h("option", { value: o, selected: st[key] === o }, o))));
 }
 function contact(o) {
-  if (!session) return h("div", { class: "contact" }, h("a", { href: "#prijava", onclick: () => { try { sessionStorage.setItem("povratak", location.hash); } catch {} } }, "Prijavi se"), " da vidiš kontakt.");
+  if (!session) return h("div", { class: "contact" }, h("a", { href: "/prijava", onclick: () => { try { sessionStorage.setItem("povratak", location.pathname); } catch {} } }, "Prijavi se"), " da vidiš kontakt.");
   if (!o.kontakt) return null;
   const c = h("button", { class: "btn small quiet", type: "button", onclick: async () => {
     try { await navigator.clipboard.writeText(o.kontakt); toast("Kontakt je kopiran"); } catch { toast("Označi kontakt i kopiraj ga ručno"); }
@@ -312,13 +312,13 @@ const adRow = (o, tag = "summary", href) => h(tag, { class: "row thumbed" + (fea
 const jobRow = (o, tag = "summary", href) => h(tag, { class: "row" + (featured(o) ? " featured" : ""), href }, h("h3", {}, o.naslov),
   h("div", { class: "value" }, o.honorar || "Po dogovoru"),
   h("div", { class: "meta" }, featTag(o), h("span", {}, o.vrsta), h("span", {}, place(o)), o.rok ? h("span", {}, "Rok: " + day(o.rok)) : null, h("span", {}, nameOf(o.autor)), h("span", {}, date(o.created_at))));
-const threadRow = t => h("a", { class: "row", href: "#tema-" + t.id }, h("h3", {}, t.naslov),
+const threadRow = t => h("a", { class: "row", href: "/tema/" + t.id }, h("h3", {}, t.naslov),
   h("div", { class: "value" }, String(t.broj_odgovora ?? 0), h("small", {}, "odg.")),
   h("div", { class: "meta" }, h("span", {}, t.kategorija), h("span", {}, nameOf(t.autor)), h("span", {}, date(t.created_at))));
 const bars = g => h("div", { class: "bars" }, CRIT.map(([k, l]) => h("div", { class: "bar" }, h("span", {}, l),
   h("i", {}, h("b", { vars: { "--w": `${(Number(g[k]) || 0) / 5 * 100}%` } })), h("span", {}, g.broj_ocjena ? dec(g[k]) : "–"))));
 const scoreBox = g => h("div", { class: "score" }, g.broj_ocjena ? dec(g.prosjek) : "–", h("small", {}, plural(g.broj_ocjena || 0, "ocjena", "ocjene", "ocjena")));
-const gearCard = g => h("a", { class: "gear-card", href: "#oprema-" + g.id }, scoreBox(g), h("h3", {}, g.naziv), h("div", { class: "meta" }, h("span", {}, g.kategorija)), bars(g));
+const gearCard = g => h("a", { class: "gear-card", href: "/oprema/" + g.id }, scoreBox(g), h("h3", {}, g.naziv), h("div", { class: "meta" }, h("span", {}, g.kategorija)), bars(g));
 const fill = (el, items, emptyEl) => el.replaceChildren(...(items.length ? items : [emptyEl]));
 
 function adBody(o) {
@@ -330,7 +330,7 @@ function adBody(o) {
       ...featureBtns("oglasi", o),
       canEdit(o) ? h("button", { class: "btn small quiet", type: "button", onclick: () => oglasForm(o) }, "Uredi") : null,
       delBtn(o, async () => { await removeSlike(o.slike); await q(sb.from("oglasi").delete().eq("id", o.id)); }),
-      reportBtn("oglas", o, "#oglas-" + o.id, o.naslov)),
+      reportBtn("oglas", o, "/oglas/" + o.id, o.naslov)),
   ];
 }
 const RAZLOZI = ["Spam ili reklama", "Prijevara ili lažna objava", "Uvredljiv sadržaj", "Nezakonit sadržaj", "Ne pripada ovdje", "Drugo"];
@@ -342,7 +342,7 @@ function reportBtn(vrsta, item, poveznica, naslov) {
       fields: [{ name: "razlog", label: "Razlog", options: RAZLOZI, placeholder: "Odaberi", required: true },
         { name: "napomena", label: "Napomena (nije obavezno)", type: "textarea", max: 500, hint: "Što nije u redu s ovom objavom?" }],
       save: async v => {
-        try { await q(sb.from("prijave").insert({ vrsta, objekt: item.id, poveznica, naslov: String(naslov || "Objava").slice(0, 200), razlog: v.razlog, napomena: v.napomena || null })); }
+        try { await q(sb.from("prijave").insert({ vrsta, objekt: item.id, poveznica: poveznica.replace(/^\/([a-z]+)\//, "#$1-"), naslov: String(naslov || "Objava").slice(0, 200), razlog: v.razlog, napomena: v.napomena || null })); }
         catch (e) { if (e?.code === "23505") throw new UserError("Ovu si objavu već prijavio. Administrator će je pregledati."); throw e; }
       } });
   } }, "Prijavi");
@@ -432,7 +432,7 @@ function jobBody(o) {
     ...featureBtns("poslovi", o),
     canEdit(o) ? h("button", { class: "btn small quiet", type: "button", onclick: () => posaoForm(o) }, "Uredi") : null,
     delBtn(o, () => q(sb.from("poslovi").delete().eq("id", o.id))),
-    reportBtn("posao", o, "#posao-" + o.id, o.naslov))];
+    reportBtn("posao", o, "/posao/" + o.id, o.naslov))];
 }
 
 /* ------------------------------------------------------------------ */
@@ -442,7 +442,7 @@ let redraw = () => {};
 
 const views = {
   async pocetna(_, alive) {
-    const door = (href, label, y, stem, cls, key) => h("a", { class: "door " + cls, href: "#" + href, vars: { "--y": y, "--stem": stem } },
+    const door = (href, label, y, stem, cls, key) => h("a", { class: "door " + cls, href: "/" + href, vars: { "--y": y, "--stem": stem } },
       cls.includes("low") ? h("span", { class: "ledger" }) : null, h("span", { class: "stem" }), h("span", { class: "head" }, h("span", { "data-c": key }, "–")), h("span", { class: "label" }, label));
     const fx = h("canvas", { class: "band-fx", "aria-hidden": "true" });
     $("hero").replaceChildren(h("section", { class: "band" }, fx, h("div", { class: "wrap" },
@@ -451,10 +451,10 @@ const views = {
         door("oglasi", "Oglasnik", 5.5, 2.5, "low", "oglasi"), door("poslovi", "Burza poslova", 4.5, 1.5, "", "poslovi"),
         door("forum", "Forum", 3.5, .5, "", "teme"), door("ocjene", "Ocjene opreme", 2, 2, "down", "oprema")))));
     bandFx(fx);
-    const box = (title, href, cls = "rows") => { const list = h("div", { class: cls }, loading()); return [list, h("section", {}, h("h2", {}, title, h("a", { href: "#" + href }, "Sve")), list)]; };
+    const box = (title, href, cls = "rows") => { const list = h("div", { class: cls }, loading()); return [list, h("section", {}, h("h2", {}, title, h("a", { href: "/" + href }, "Sve")), list)]; };
     const [a, as] = box("Novi oglasi", "oglasi"), [j, js] = box("Novi poslovi", "poslovi"), [t, ts] = box("Na forumu", "forum"), [g, gs] = box("Najbolje ocijenjeno", "ocjene", "stack");
     const featList = h("div", { class: "feat-grid" });
-    const featSec = h("section", { class: "feat-sec", hidden: true }, h("h2", {}, "Istaknuti oglasi", h("a", { href: "#oglasi" }, "Svi oglasi")), featList);
+    const featSec = h("section", { class: "feat-sec", hidden: true }, h("h2", {}, "Istaknuti oglasi", h("a", { href: "/oglasi" }, "Svi oglasi")), featList);
     $("main").replaceChildren(featSec, h("div", { class: "home" }, as, js, ts, gs));
 
     const newest = (tbl, cols, n = 3) => q(sb.from(tbl).select(cols).order("created_at", { ascending: false }).limit(n));
@@ -469,11 +469,11 @@ const views = {
     if (!alive()) return;
     ["oglasi", "poslovi", "teme", "oprema"].forEach((k, i) => { const el = document.querySelector(`[data-c="${k}"]`); if (el) el.textContent = counts[i]; });
     featSec.hidden = !ft.length;
-    featList.replaceChildren(...ft.map(o => h("a", { class: "feat-card", href: "#oglas-" + o.id },
+    featList.replaceChildren(...ft.map(o => h("a", { class: "feat-card", href: "/oglas/" + o.id },
       o.slike?.length ? h("img", { src: imgUrl(o.slike[0]), alt: "", loading: "lazy" }) : h("span", { class: "feat-ph", "aria-hidden": "true" }, "♪"),
       h("span", { class: "tag feat" }, "Istaknuto"), h("strong", {}, o.naslov), h("span", { class: "value" }, price(o)), h("span", { class: "meta" }, place(o)))));
-    fill(a, og.map(o => adRow(o, "a", "#oglas-" + o.id)), emptyBox("Još nema oglasa", "Objavi prvi oglas u Oglasniku."));
-    fill(j, po.map(o => jobRow(o, "a", "#posao-" + o.id)), emptyBox("Još nema poslova", "Objavi prvi posao na Burzi poslova."));
+    fill(a, og.map(o => adRow(o, "a", "/oglas/" + o.id)), emptyBox("Još nema oglasa", "Objavi prvi oglas u Oglasniku."));
+    fill(j, po.map(o => jobRow(o, "a", "/posao/" + o.id)), emptyBox("Još nema poslova", "Objavi prvi posao na Burzi poslova."));
     fill(t, te.map(threadRow), emptyBox("Još nema tema", "Otvori prvu temu na Forumu."));
     fill(g, op.map(gearCard), emptyBox("Još nema ocjena", "Dodaj opremu u Ocjenama opreme."));
   },
@@ -529,14 +529,15 @@ const views = {
 
   async tema(id, alive) {
     const box = h("div", { class: "stack" }, loading()), list = h("div", { class: "stack" });
-    $("main").replaceChildren(h("a", { class: "back", href: "#forum" }, "Natrag na forum"), box, list);
+    $("main").replaceChildren(h("a", { class: "back", href: "/forum" }, "Natrag na forum"), box, list);
     const [t] = await q(sb.from("teme").select("*").eq("id", id).limit(1));
     if (!t) { if (alive()) box.replaceChildren(emptyBox("Ova tema više ne postoji", "Vrati se na forum.")); return; }
     const rs = await q(sb.from("odgovori").select("*").eq("tema", id).order("created_at"));
     await loadNames([t.autor, ...rs.map(r => r.autor)]);
     if (!alive()) return;
+    setTitle(t.naslov);
     box.replaceChildren(metaHead(t.naslov, [h("span", {}, t.kategorija), h("span", {}, nameOf(t.autor)), h("span", {}, date(t.created_at))]),
-      h("article", { class: "post" }, h("p", { class: "prose" }, t.tekst), h("div", { class: "actions" }, delBtn(t, async () => { await q(sb.from("teme").delete().eq("id", t.id)); location.hash = "#forum"; }), reportBtn("tema", t, "#tema-" + t.id, t.naslov))));
+      h("article", { class: "post" }, h("p", { class: "prose" }, t.tekst), h("div", { class: "actions" }, delBtn(t, async () => { await q(sb.from("teme").delete().eq("id", t.id)); go("/forum"); }), reportBtn("tema", t, "/tema/" + t.id, t.naslov))));
     let form;
     if (session) {
       const ta = h("textarea", { id: "reply-text", required: true, maxlength: 3000 });
@@ -548,11 +549,11 @@ const views = {
         catch (x) { err.textContent = errText(x); send.disabled = false; }
       } }, h("label", { class: "field", for: "reply-text" }, "Tvoj odgovor", ta), err, h("div", {}, send));
     } else {
-      form = h("p", {}, h("a", { href: "#prijava", onclick: () => { try { sessionStorage.setItem("povratak", location.hash); } catch {} } }, "Prijavi se"), " da odgovoriš.");
+      form = h("p", {}, h("a", { href: "/prijava", onclick: () => { try { sessionStorage.setItem("povratak", location.pathname); } catch {} } }, "Prijavi se"), " da odgovoriš.");
     }
     list.replaceChildren(h("h2", {}, plural(rs.length, "odgovor", "odgovora", "odgovora")),
       ...rs.map(r => h("article", { class: "post" }, h("div", { class: "meta" }, h("span", {}, nameOf(r.autor)), h("span", {}, date(r.created_at))), h("p", { class: "prose" }, r.tekst),
-        h("div", { class: "actions" }, delBtn(r, () => q(sb.from("odgovori").delete().eq("id", r.id))), reportBtn("odgovor", r, "#tema-" + t.id, "Odgovor u temi: " + t.naslov)))), form);
+        h("div", { class: "actions" }, delBtn(r, () => q(sb.from("odgovori").delete().eq("id", r.id))), reportBtn("odgovor", r, "/tema/" + t.id, "Odgovor u temi: " + t.naslov)))), form);
   },
 
   async ocjene(_, alive) {
@@ -576,7 +577,7 @@ const views = {
 
   async oprema(id, alive) {
     const box = h("div", { class: "stack" }, loading()), list = h("div", { class: "stack" });
-    $("main").replaceChildren(h("a", { class: "back", href: "#ocjene" }, "Natrag na ocjene"), box, list);
+    $("main").replaceChildren(h("a", { class: "back", href: "/ocjene" }, "Natrag na ocjene"), box, list);
     const [g] = await q(sb.from("oprema_pregled").select("*").eq("id", id).limit(1));
     if (!g) { if (alive()) box.replaceChildren(emptyBox("Ova oprema više ne postoji", "Vrati se na ocjene.")); return; }
     const rs = await q(sb.from("recenzije").select("*").eq("oprema", id).order("created_at", { ascending: false }));
@@ -595,36 +596,39 @@ const views = {
           return mine ? q(sb.from("recenzije").update(row).eq("id", mine.id)) : q(sb.from("recenzije").insert({ oprema: id, ...row }));
         } });
     };
+    setTitle(g.naziv);
     box.replaceChildren(metaHead(g.naziv, [h("span", {}, g.kategorija)], h("button", { class: "btn", type: "button", onclick: rate }, mine ? "Promijeni ocjenu" : "Ocijeni")),
-      h("div", { class: "post" }, scoreBox(g), bars(g), h("div", { class: "actions" }, delBtn(g, async () => { await q(sb.from("oprema").delete().eq("id", g.id)); location.hash = "#ocjene"; }), reportBtn("oprema", g, "#oprema-" + g.id, g.naziv))));
+      h("div", { class: "post" }, scoreBox(g), bars(g), h("div", { class: "actions" }, delBtn(g, async () => { await q(sb.from("oprema").delete().eq("id", g.id)); go("/ocjene"); }), reportBtn("oprema", g, "/oprema/" + g.id, g.naziv))));
     list.replaceChildren(h("h2", {}, "Iskustva korisnika"),
       ...(rs.length ? rs.map(r => h("article", { class: "post" },
         h("div", { class: "meta" }, h("span", {}, nameOf(r.autor)), h("span", {}, date(r.created_at)), ...CRIT.map(([k, l]) => h("span", {}, `${l} ${r[k]}/5`))),
-        h("p", { class: "prose" }, r.tekst), h("div", { class: "actions" }, delBtn(r, () => q(sb.from("recenzije").delete().eq("id", r.id))), reportBtn("recenzija", r, "#oprema-" + g.id, "Ocjena za: " + g.naziv)))) : [emptyBox("Još nema ocjena", "Budi prvi koji će ocijeniti ovaj model.")]));
+        h("p", { class: "prose" }, r.tekst), h("div", { class: "actions" }, delBtn(r, () => q(sb.from("recenzije").delete().eq("id", r.id))), reportBtn("recenzija", r, "/oprema/" + g.id, "Ocjena za: " + g.naziv)))) : [emptyBox("Još nema ocjena", "Budi prvi koji će ocijeniti ovaj model.")]));
   },
 
   async oglas(id, alive) {
-    $("main").replaceChildren(h("a", { class: "back", href: "#oglasi" }, "Natrag na oglasnik"), loading());
+    $("main").replaceChildren(h("a", { class: "back", href: "/oglasi" }, "Natrag na oglasnik"), loading());
     const [o] = await q(sb.from("oglasi").select(session ? OGLAS_JAVNO + ",kontakt" : OGLAS_JAVNO).eq("id", id).limit(1));
     if (o) await loadNames([o.autor]);
     if (!alive()) return;
-    $("main").replaceChildren(h("a", { class: "back", href: "#oglasi" }, "Natrag na oglasnik"), !o ? emptyBox("Ovaj oglas više ne postoji", "Možda je prodano. Pogledaj ostale oglase.") :
+    if (o) setTitle(o.naslov);
+    $("main").replaceChildren(h("a", { class: "back", href: "/oglasi" }, "Natrag na oglasnik"), !o ? emptyBox("Ovaj oglas više ne postoji", "Možda je prodano. Pogledaj ostale oglase.") :
       h("div", { class: "stack" }, metaHead(o.naslov, [h("span", {}, o.kategorija), h("span", {}, o.stanje), h("span", {}, place(o)), h("span", {}, nameOf(o.autor)), h("span", {}, date(o.created_at))], h("div", { class: "value big" }, price(o))),
         h("article", { class: "post" }, adBody(o))));
   },
 
   async posao(id, alive) {
-    $("main").replaceChildren(h("a", { class: "back", href: "#poslovi" }, "Natrag na burzu poslova"), loading());
+    $("main").replaceChildren(h("a", { class: "back", href: "/poslovi" }, "Natrag na burzu poslova"), loading());
     const [o] = await q(sb.from("poslovi").select(session ? POSAO_JAVNO + ",kontakt" : POSAO_JAVNO).eq("id", id).limit(1));
     if (o) await loadNames([o.autor]);
     if (!alive()) return;
-    $("main").replaceChildren(h("a", { class: "back", href: "#poslovi" }, "Natrag na burzu poslova"), !o ? emptyBox("Ovaj posao više ne postoji", "Pogledaj ostale poslove.") :
+    if (o) setTitle(o.naslov);
+    $("main").replaceChildren(h("a", { class: "back", href: "/poslovi" }, "Natrag na burzu poslova"), !o ? emptyBox("Ovaj posao više ne postoji", "Pogledaj ostale poslove.") :
       h("div", { class: "stack" }, metaHead(o.naslov, [h("span", {}, o.vrsta), h("span", {}, place(o)), o.rok ? h("span", {}, "Rok: " + day(o.rok)) : null, h("span", {}, nameOf(o.autor)), h("span", {}, date(o.created_at))], h("div", { class: "value big" }, o.honorar || "Po dogovoru")),
         h("article", { class: "post" }, jobBody(o))));
   },
 
   async prijave(_, alive) {
-    if (!me?.admin) { location.hash = "#pocetna"; return; }
+    if (!me?.admin) { go("/"); return; }
     const st = filters.prijave, list = h("div", { class: "stack" }, loading()), chips = h("div", { class: "chips" });
     $("main").replaceChildren(pageHead("Prijave", "Objave koje su korisnici prijavili. Otvori objavu, izbriši je ako krši pravila i označi prijavu kao riješenu."), chips, list);
     const rows = await q(sb.from("prijave").select("*").order("created_at", { ascending: false }).limit(LIMIT));
@@ -640,7 +644,7 @@ const views = {
         h("div", { class: "meta" }, h("span", { class: "tag" }, r.vrsta), h("span", {}, r.razlog), h("span", {}, "prijavio: " + nameOf(r.autor)), h("span", {}, date(r.created_at))),
         h("h3", {}, r.naslov),
         r.napomena ? h("p", { class: "prose" }, r.napomena) : null,
-        h("div", { class: "actions" }, h("a", { class: "btn small", href: r.poveznica }, "Otvori objavu"),
+        h("div", { class: "actions" }, h("a", { class: "btn small", href: r.poveznica.replace(/^#([a-z]+)-/, "/$1/") }, "Otvori objavu"),
           r.rijeseno ? h("button", { class: "btn small quiet", type: "button", onclick: solve(r, false) }, "Vrati u otvorene")
             : h("button", { class: "btn small quiet", type: "button", onclick: solve(r, true) }, "Označi riješeno")))),
         emptyBox(st.tab === "rijesene" ? "Nema riješenih prijava" : "Nema otvorenih prijava", st.tab === "rijesene" ? "" : "Sve je u redu."));
@@ -654,33 +658,33 @@ const views = {
 
   /* ---------------- Računi ---------------- */
   async prijava() {
-    if (session) { location.hash = "#racun"; return; }
+    if (session) { go("/racun"); return; }
     authPage("Prijava", "Prijavi se da objavljuješ oglase, poslove i odgovore.", [
       { name: "email", label: "E-mail", type: "email", auto: "email" },
       { name: "lozinka", label: "Lozinka", type: "password", auto: "current-password" }],
       "Prijavi se", async v => {
         await q(sb.auth.signInWithPassword({ email: v.email, password: v.lozinka }));
-        let back = "#pocetna"; try { back = sessionStorage.getItem("povratak") || back; sessionStorage.removeItem("povratak"); } catch {}
-        location.hash = back; toast("Prijavljen si");
+        let back = "/"; try { back = sessionStorage.getItem("povratak") || back; sessionStorage.removeItem("povratak"); } catch {}
+        go(back); toast("Prijavljen si");
       },
-      [h("a", { href: "#zaboravljena-lozinka" }, "Zaboravio si lozinku?"), h("span", {}, "Nemaš račun? ", h("a", { href: "#registracija" }, "Registriraj se"))]);
+      [h("a", { href: "/zaboravljena-lozinka" }, "Zaboravio si lozinku?"), h("span", {}, "Nemaš račun? ", h("a", { href: "/registracija" }, "Registriraj se"))]);
   },
 
   async registracija() {
-    if (session) { location.hash = "#racun"; return; }
+    if (session) { go("/racun"); return; }
     authPage("Registracija", "Besplatno. Ime koje upišeš vidjet će drugi uz tvoje objave. Poslat ćemo ti e-poruku za potvrdu računa, pa provjeri i neželjenu poštu.", [
       { name: "ime", label: "Ime ili nadimak", type: "text", auto: "nickname", max: 60 },
       { name: "email", label: "E-mail", type: "email", auto: "email" },
       { name: "lozinka", label: "Lozinka", type: "password", auto: "new-password", min: 8, hint: "Najmanje 8 znakova." }],
       "Registriraj se", async (v, ok) => {
         const data = await q(sb.auth.signUp({ email: v.email, password: v.lozinka, options: { data: { ime: v.ime }, emailRedirectTo: location.origin + "/" } }));
-        if (data.session) { location.hash = "#pocetna"; toast("Dobro došao na BisStage"); }
+        if (data.session) { go("/"); toast("Dobro došao na BisStage"); }
         else ok("Poslali smo ti e-poruku. Klikni poveznicu u njoj da potvrdiš račun, a zatim se prijavi. Ako poruku ne vidiš za nekoliko minuta, provjeri neželjenu poštu (Spam).");
       },
-      [h("span", {}, "Već imaš račun? ", h("a", { href: "#prijava" }, "Prijavi se"))], true,
+      [h("span", {}, "Već imaš račun? ", h("a", { href: "/prijava" }, "Prijavi se"))], true,
       h("label", { class: "check", for: "a-uvjeti" }, h("input", { id: "a-uvjeti", name: "uvjeti", type: "checkbox", required: true }),
-        h("span", {}, "Imam najmanje 16 godina i prihvaćam ", h("a", { href: "#uvjeti", target: "_blank" }, "Uvjete korištenja"), " i ",
-          h("a", { href: "#privatnost", target: "_blank" }, "Pravila privatnosti"), ".")));
+        h("span", {}, "Imam najmanje 16 godina i prihvaćam ", h("a", { href: "/uvjeti", target: "_blank" }, "Uvjete korištenja"), " i ",
+          h("a", { href: "/privatnost", target: "_blank" }, "Pravila privatnosti"), ".")));
   },
 
   async ["zaboravljena-lozinka"]() {
@@ -689,21 +693,21 @@ const views = {
       "Pošalji poveznicu", async (v, ok) => {
         await q(sb.auth.resetPasswordForEmail(v.email, { redirectTo: location.origin + "/?reset=1" }));
         ok("Ako postoji račun s tom adresom, poslali smo ti poveznicu. Ako je ne vidiš, provjeri neželjenu poštu (Spam).");
-      }, [h("a", { href: "#prijava" }, "Natrag na prijavu")], false);
+      }, [h("a", { href: "/prijava" }, "Natrag na prijavu")], false);
   },
 
   async ["nova-lozinka"]() {
-    if (!session) { authPage("Poveznica je istekla", "Zatraži novu poveznicu za promjenu lozinke.", [], null, null, [h("a", { class: "btn", href: "#zaboravljena-lozinka" }, "Zatraži novu poveznicu")], false); return; }
+    if (!session) { authPage("Poveznica je istekla", "Zatraži novu poveznicu za promjenu lozinke.", [], null, null, [h("a", { class: "btn", href: "/zaboravljena-lozinka" }, "Zatraži novu poveznicu")], false); return; }
     authPage("Postavi novu lozinku", "Upiši novu lozinku za svoj račun.", [
       { name: "lozinka", label: "Nova lozinka", type: "password", auto: "new-password", min: 8, hint: "Najmanje 8 znakova." }],
       "Spremi lozinku", async () => {
         await q(sb.auth.updateUser({ password: $("a-lozinka").value }));
-        location.hash = "#pocetna"; toast("Lozinka je promijenjena");
+        go("/"); toast("Lozinka je promijenjena");
       }, [], false);
   },
 
   async racun(_, alive) {
-    if (!session) { location.hash = "#prijava"; return; }
+    if (!session) { go("/prijava"); return; }
     const err = h("p", { class: "err", role: "alert" });
     const name = h("input", { id: "r-ime", required: true, maxlength: 60, value: me?.ime || "" });
     const save = h("button", { class: "btn", type: "submit" }, "Spremi ime");
@@ -718,11 +722,11 @@ const views = {
         save.disabled = false;
       } }, h("label", { class: "field", for: "r-ime" }, "Ime koje drugi vide", name), err, h("div", {}, save)),
       counts,
-      me?.admin ? h("p", {}, h("span", { class: "tag" }, "Administrator"), " Možeš brisati sve objave. ", h("a", { href: "#prijave" }, reportCount ? `Otvorene prijave: ${reportCount}` : "Pregled prijava")) : null,
+      me?.admin ? h("p", {}, h("span", { class: "tag" }, "Administrator"), " Možeš brisati sve objave. ", h("a", { href: "/prijave" }, reportCount ? `Otvorene prijave: ${reportCount}` : "Pregled prijava")) : null,
       h("p", {}, "Za brisanje računa i svih podataka piši na ", h("a", { href: "mailto:kontakt@bisstage.com" }, "kontakt@bisstage.com"), " s ove e-mail adrese."),
       h("div", { class: "actions" },
-        h("a", { class: "btn quiet", href: "#zaboravljena-lozinka" }, "Promijeni lozinku"),
-        h("button", { class: "btn danger", type: "button", onclick: async () => { await sb.auth.signOut(); location.hash = "#pocetna"; toast("Odjavljen si"); } }, "Odjavi se"))));
+        h("a", { class: "btn quiet", href: "/zaboravljena-lozinka" }, "Promijeni lozinku"),
+        h("button", { class: "btn danger", type: "button", onclick: async () => { await sb.auth.signOut(); go("/"); toast("Odjavljen si"); } }, "Odjavi se"))));
     const c = tbl => sb.from(tbl).select("id", { count: "exact", head: true }).eq("autor", uid()).then(r => r.count ?? 0);
     const [o, p, t] = await Promise.all([c("oglasi"), c("poslovi"), c("teme")]);
     if (alive()) counts.textContent = `Objavio si ${plural(o, "oglas", "oglasa", "oglasa")}, ${plural(p, "posao", "posla", "poslova")} i ${plural(t, "temu", "teme", "tema")}.`;
@@ -758,8 +762,8 @@ function authPage(title, text, fields, submitLabel, run, links = [], google = tr
     const { error } = await sb.auth.signInWithOAuth({ provider: "google", options: { redirectTo: location.origin + "/" } });
     if (error) err.textContent = errText(error);
   } }, "Nastavi s Google računom"),
-    h("p", { class: "hint" }, "Nastavkom s Google računom potvrđuješ da imaš najmanje 16 godina i prihvaćaš ", h("a", { href: "#uvjeti", target: "_blank" }, "Uvjete korištenja"), " i ",
-      h("a", { href: "#privatnost", target: "_blank" }, "Pravila privatnosti"), "."),
+    h("p", { class: "hint" }, "Nastavkom s Google računom potvrđuješ da imaš najmanje 16 godina i prihvaćaš ", h("a", { href: "/uvjeti", target: "_blank" }, "Uvjete korištenja"), " i ",
+      h("a", { href: "/privatnost", target: "_blank" }, "Pravila privatnosti"), "."),
     h("div", { class: "or" }, "ili")] : [];
   $("main").replaceChildren(h("div", { class: "auth" }, h("h1", {}, title), h("p", {}, text), ...g, form, h("div", { class: "actions" }, links)));
 }
@@ -769,16 +773,35 @@ function authPage(title, text, fields, submitLabel, run, links = [], google = tr
 /* ------------------------------------------------------------------ */
 const NAV_OF = { tema: "forum", oprema: "ocjene", oglas: "oglasi", posao: "poslovi", prijava: "account", registracija: "account", racun: "account", prijave: "account" };
 
+const TITLE = "BisStage – oglasnik instrumenata, poslovi za glazbenike i forum";
+function setTitle(t) { document.title = t ? `${t} – BisStage` : TITLE; }
+
+function go(path) {
+  if (path !== location.pathname) history.pushState(null, "", path);
+  route();
+}
+
+// Stare adrese s # (npr. #oglas-<id>, #forum) prebacuju se na prave putanje.
+function legacyHash() {
+  const h = location.hash.slice(1);
+  if (!h) return null;
+  const m = h.match(/^(tema|oprema|oglas|posao)-([0-9a-f-]{36})$/);
+  if (m) return `/${m[1]}/${m[2]}`;
+  if (h === "pocetna") return "/";
+  return views[h] ? "/" + h : null;
+}
+
 async function route(keepScroll) {
   const token = ++navToken;
   const alive = () => token === navToken;
-  const raw = location.hash.slice(1) || "pocetna";
-  const m = raw.match(/^(tema|oprema|oglas|posao)-([0-9a-f-]{36})$/);
+  const raw = location.pathname.replace(/^\/+|\/+$/g, "") || "pocetna";
+  const m = raw.match(/^(tema|oprema|oglas|posao)\/([0-9a-f-]{36})$/);
   const name = m ? m[1] : views[raw] ? raw : "pocetna";
   redraw = () => {};
+  setTitle(null);
   if (name !== "pocetna") $("hero").replaceChildren();
   const navName = NAV_OF[name] || name;
-  document.querySelectorAll("#nav a").forEach(a => a.getAttribute("href") === "#" + navName ? a.setAttribute("aria-current", "page") : a.removeAttribute("aria-current"));
+  document.querySelectorAll("#nav a").forEach(a => a.getAttribute("href") === "/" + navName ? a.setAttribute("aria-current", "page") : a.removeAttribute("aria-current"));
   navName === "account" ? $("account").setAttribute("aria-current", "page") : $("account").removeAttribute("aria-current");
   const y = window.scrollY;
   try { await views[name](m && m[2], alive); }
@@ -805,8 +828,8 @@ async function updateReportCount() {
 }
 function renderAccount() {
   const a = $("account");
-  if (session) { a.textContent = (me?.ime || "Moj račun") + (reportCount ? " · " + plural(reportCount, "prijava", "prijave", "prijava") : ""); a.href = reportCount ? "#prijave" : "#racun"; }
-  else { a.textContent = "Prijava"; a.href = "#prijava"; }
+  if (session) { a.textContent = (me?.ime || "Moj račun") + (reportCount ? " · " + plural(reportCount, "prijava", "prijave", "prijava") : ""); a.href = reportCount ? "/prijave" : "/racun"; }
+  else { a.textContent = "Prijava"; a.href = "/prijava"; }
 }
 
 async function boot() {
@@ -818,7 +841,10 @@ async function boot() {
   const params = new URLSearchParams(location.search);
   const { data } = await sb.auth.getSession();
   session = data.session;
-  if (location.search) history.replaceState(null, "", location.pathname + (params.get("reset") ? "#nova-lozinka" : location.hash));
+  const legacy = legacyHash();
+  if (params.get("reset")) history.replaceState(null, "", "/nova-lozinka");
+  else if (legacy) history.replaceState(null, "", legacy);
+  else if (location.search || location.hash) history.replaceState(null, "", location.pathname);
   if (params.get("error_description")) toast("Poveznica nije valjana ili je istekla. Zatraži novu.");
   await loadMe();
   renderAccount();
@@ -830,11 +856,21 @@ async function boot() {
       await loadMe();
       renderAccount();
       updateReportCount().catch(() => {});
-      if (event === "PASSWORD_RECOVERY") { location.hash = "#nova-lozinka"; return; }
+      if (event === "PASSWORD_RECOVERY") { go("/nova-lozinka"); return; }
       if (event === "SIGNED_IN" || event === "SIGNED_OUT" || event === "USER_UPDATED") refresh();
     }, 0);
   });
-  addEventListener("hashchange", () => route());
+  addEventListener("popstate", () => route());
+  addEventListener("hashchange", () => { const l = legacyHash(); if (l) { history.replaceState(null, "", l); route(); } });
+  document.addEventListener("click", e => {
+    const a = e.target.closest("a[href]");
+    if (!a || a.target === "_blank" || a.hasAttribute("download") || e.defaultPrevented || e.button || e.metaKey || e.ctrlKey || e.shiftKey || e.altKey) return;
+    const u = new URL(a.href, location.href);
+    if (u.origin !== location.origin || /\.[a-z0-9]+$/i.test(u.pathname)) return;
+    e.preventDefault();
+    if (a.closest("dialog")) a.closest("dialog").close();
+    go(u.pathname);
+  });
   route();
 }
 boot();

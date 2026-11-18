@@ -1,0 +1,7 @@
+User-agent: *
+Allow: /
+Disallow: /racun
+Disallow: /prijave
+Disallow: /nova-lozinka
+
+Sitemap: https://bisstage.com/sitemap.xml

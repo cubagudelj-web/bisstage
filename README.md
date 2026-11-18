@@ -9,6 +9,7 @@ Zajednica glazbenika iz Hrvatske i regije: oglasnik instrumenata, burza poslova,
 | `public/` | Cloudflare Pages | Stranica koju posjetitelji vide (HTML, CSS, JavaScript, bez izgradnje) |
 | `supabase/schema.sql` | Supabase | Baza podataka, sigurnosna pravila i spremište fotografija |
 | `public/config.js` | | Adresa Supabase projekta i javni ključ |
+| `functions/`, `lib/seo.js` | Cloudflare Pages Functions | Naslov, opis i slika za Google i pregled pri dijeljenju (`/oglas/<id>`, `/posao/<id>`, `/tema/<id>`, `/oprema/<id>`) te `sitemap.xml` |
 
 Javni (`sb_publishable_`) ključ smije biti u kodu. Podatke štite pravila u `schema.sql`.
 Tajni ključ (`sb_secret_` ili `service_role`) nikada ne ide u ovaj repozitorij.

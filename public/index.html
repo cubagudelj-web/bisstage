@@ -3,35 +3,41 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<!--meta-->
 <title>BisStage – oglasnik instrumenata, poslovi za glazbenike i forum</title>
 <meta name="description" content="Kupi i prodaj instrumente, nađi svirku, pitaj kolege i ocijeni opremu. Zajednica glazbenika iz Hrvatske i regije.">
-<meta property="og:title" content="BisStage">
-<meta property="og:description" content="Oglasnik instrumenata, burza poslova, forum i ocjene opreme za glazbenike iz Hrvatske i regije.">
+<meta property="og:site_name" content="BisStage">
+<meta property="og:title" content="BisStage – oglasnik instrumenata, poslovi za glazbenike i forum">
+<meta property="og:description" content="Kupi i prodaj instrumente, nađi svirku, pitaj kolege i ocijeni opremu. Zajednica glazbenika iz Hrvatske i regije.">
 <meta property="og:type" content="website">
+<meta property="og:image" content="https://bisstage.com/og.png">
+<meta property="og:url" content="https://bisstage.com/">
+<meta name="twitter:card" content="summary_large_image">
+<!--/meta-->
 <meta name="theme-color" content="#2a2fd6">
 <link rel="icon" href="/favicon.svg" type="image/svg+xml">
 <link rel="preload" href="/fonts/bricolage.woff" as="font" type="font/woff" crossorigin>
 <link rel="preload" href="/fonts/instrument-sans.woff" as="font" type="font/woff" crossorigin>
-<link rel="stylesheet" href="/styles.css?v=7">
+<link rel="stylesheet" href="/styles.css?v=8">
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.97.0" defer></script>
-<script src="/config.js?v=7" defer></script>
-<script src="/pravno.js?v=7" defer></script>
-<script src="/app.js?v=7" defer></script>
+<script src="/config.js?v=8" defer></script>
+<script src="/pravno.js?v=8" defer></script>
+<script src="/app.js?v=8" defer></script>
 </head>
 <body>
 <header class="top"><div class="wrap">
-  <a class="brand" href="#pocetna">BisStage</a>
+  <a class="brand" href="/">BisStage</a>
   <nav class="nav" id="nav" aria-label="Glavni izbornik">
-    <a href="#oglasi">Oglasnik</a>
-    <a href="#poslovi">Burza poslova</a>
-    <a href="#forum">Forum</a>
-    <a href="#ocjene">Ocjene opreme</a>
+    <a href="/oglasi">Oglasnik</a>
+    <a href="/poslovi">Burza poslova</a>
+    <a href="/forum">Forum</a>
+    <a href="/ocjene">Ocjene opreme</a>
   </nav>
-  <a class="account" id="account" href="#prijava">Prijava</a>
+  <a class="account" id="account" href="/prijava">Prijava</a>
 </div></header>
 <div id="hero"></div>
 <main class="wrap" id="main"><div class="empty">Učitavam…</div></main>
-<footer><div class="wrap"><span>© 2026 BisStage. Zajednica glazbenika iz Hrvatske i regije.</span><nav class="foot-links" aria-label="Pravne informacije"><a href="#uvjeti">Uvjeti korištenja</a><a href="#privatnost">Pravila privatnosti</a><a href="mailto:kontakt@bisstage.com">kontakt@bisstage.com</a></nav></div></footer>
+<footer><div class="wrap"><span>© 2026 BisStage. Zajednica glazbenika iz Hrvatske i regije.</span><nav class="foot-links" aria-label="Pravne informacije"><a href="/uvjeti">Uvjeti korištenja</a><a href="/privatnost">Pravila privatnosti</a><a href="mailto:kontakt@bisstage.com">kontakt@bisstage.com</a></nav></div></footer>
 <dialog id="dlg"></dialog>
 <div class="toast" id="toast" role="status" hidden></div>
 <noscript><p class="wrap">BisStage treba JavaScript. Uključi ga u pregledniku.</p></noscript>
