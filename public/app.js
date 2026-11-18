@@ -346,6 +346,59 @@ function openGallery(paths, start, title) {
   dlg.showModal();
 }
 
+/* Pozadinska animacija zaglavlja: zvučni valovi i note koje se lagano dižu. */
+function bandFx(canvas) {
+  const ctx = canvas.getContext("2d");
+  if (!ctx) return;
+  const still = matchMedia("(prefers-reduced-motion: reduce)").matches;
+  let w = 0, hgt = 0, dpr = 1, raf = 0, t0 = performance.now();
+  const notes = Array.from({ length: 9 }, (_, i) => ({ x: Math.random(), y: Math.random(), s: 0.6 + Math.random() * 0.8, v: 0.012 + Math.random() * 0.018, ph: Math.random() * 6.28, g: i % 3 === 0 ? "♫" : "♪" }));
+  const size = () => {
+    dpr = Math.min(devicePixelRatio || 1, 2);
+    w = canvas.clientWidth; hgt = canvas.clientHeight;
+    canvas.width = Math.round(w * dpr); canvas.height = Math.round(hgt * dpr);
+    ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+  };
+  const draw = now => {
+    const t = (now - t0) / 1000;
+    ctx.clearRect(0, 0, w, hgt);
+    // valovi u gornjem dijelu, iza naslova
+    const lines = 7, top = hgt * 0.08, span = hgt * 0.42;
+    for (let i = 0; i < lines; i++) {
+      const base = top + span * (i / (lines - 1));
+      const amp = 6 + 10 * Math.sin(i * 0.9 + t * 0.35) ** 2;
+      const k = 0.006 + i * 0.0007, sp = 0.6 + i * 0.12;
+      ctx.beginPath();
+      for (let x = 0; x <= w; x += 6) {
+        const env = 0.35 + 0.65 * (x / w);
+        const y = base + Math.sin(x * k - t * sp + i) * amp * env + Math.sin(x * k * 2.3 + t * 0.4) * amp * 0.25 * env;
+        x ? ctx.lineTo(x, y) : ctx.moveTo(x, y);
+      }
+      ctx.strokeStyle = `rgba(255,255,255,${0.06 + 0.05 * (i % 3)})`;
+      ctx.lineWidth = 1.4;
+      ctx.stroke();
+    }
+    // note koje se dižu s desne strane
+    ctx.fillStyle = "rgba(255,200,61,0.28)";
+    for (const n of notes) {
+      const y = ((n.y - t * n.v) % 1 + 1) % 1;
+      const x = 0.45 + n.x * 0.55 + Math.sin(t * 0.6 + n.ph) * 0.015;
+      ctx.globalAlpha = Math.sin(y * Math.PI);
+      ctx.font = `${Math.round(16 * n.s + 10)}px serif`;
+      ctx.fillText(n.g, x * w, y * hgt * 0.45 + hgt * 0.08);
+    }
+    ctx.globalAlpha = 1;
+  };
+  const loop = now => {
+    if (!canvas.isConnected) return;
+    if (!document.hidden) draw(now);
+    raf = requestAnimationFrame(loop);
+  };
+  size();
+  if (typeof ResizeObserver === "function") new ResizeObserver(() => { size(); if (still) draw(t0 + 4000); }).observe(canvas);
+  if (still) draw(t0 + 4000); else raf = requestAnimationFrame(loop);
+}
+
 function jobBody(o) {
   return [h("p", {}, o.opis), contact(o), h("div", { class: "actions" },
     canEdit(o) ? h("button", { class: "btn small quiet", type: "button", onclick: () => posaoForm(o) }, "Uredi") : null,
@@ -362,11 +415,13 @@ const views = {
   async pocetna(_, alive) {
     const door = (href, label, y, stem, cls, key) => h("a", { class: "door " + cls, href: "#" + href, vars: { "--y": y, "--stem": stem } },
       cls.includes("low") ? h("span", { class: "ledger" }) : null, h("span", { class: "stem" }), h("span", { class: "head" }, h("span", { "data-c": key }, "–")), h("span", { class: "label" }, label));
-    $("hero").replaceChildren(h("section", { class: "band" }, h("div", { class: "wrap" },
+    const fx = h("canvas", { class: "band-fx", "aria-hidden": "true" });
+    $("hero").replaceChildren(h("section", { class: "band" }, fx, h("div", { class: "wrap" },
       h("div", {}, h("h1", {}, "BisStage"), h("p", { class: "lead" }, "Kupi i prodaj instrumente, nađi svirku, pitaj kolege i ocijeni opremu. Za glazbenike iz Hrvatske i regije.")),
       h("nav", { class: "staff", "aria-label": "Dijelovi stranice" },
         door("oglasi", "Oglasnik", 5.5, 2.5, "low", "oglasi"), door("poslovi", "Burza poslova", 4.5, 1.5, "", "poslovi"),
         door("forum", "Forum", 3.5, .5, "", "teme"), door("ocjene", "Ocjene opreme", 2, 2, "down", "oprema")))));
+    bandFx(fx);
     const box = (title, href, cls = "rows") => { const list = h("div", { class: cls }, loading()); return [list, h("section", {}, h("h2", {}, title, h("a", { href: "#" + href }, "Sve")), list)]; };
     const [a, as] = box("Novi oglasi", "oglasi"), [j, js] = box("Novi poslovi", "poslovi"), [t, ts] = box("Na forumu", "forum"), [g, gs] = box("Najbolje ocijenjeno", "ocjene", "stack");
     $("main").replaceChildren(h("div", { class: "home" }, as, js, ts, gs));
