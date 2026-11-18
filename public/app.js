@@ -14,7 +14,7 @@ const CRIT = [["zvuk", "Zvuk"], ["izrada", "Izrada"], ["vrijednost", "Vrijednost
 const MAX_SLIKA = 4;
 const LIMIT = 300;
 
-const OGLAS_JAVNO = "id,autor,naslov,kategorija,stanje,cijena,valuta,grad,drzava,opis,slike,istaknut_od,istaknut_do,created_at";
+const OGLAS_JAVNO = "id,autor,naslov,kategorija,stanje,cijena,valuta,grad,drzava,opis,slike,video,istaknut_od,istaknut_do,created_at";
 const POSAO_JAVNO = "id,autor,naslov,vrsta,honorar,grad,drzava,rok,opis,istaknut_od,istaknut_do,created_at";
 
 /* ------------------------------------------------------------------ */
@@ -153,7 +153,7 @@ function openForm({ title, submit, fields, values = {}, save, done = "Objavljeno
     if (f.options) return h("select", base, f.placeholder != null ? h("option", { value: "" }, f.placeholder) : null,
       f.options.map(o => { const [v, l] = Array.isArray(o) ? o : [o, o]; return h("option", { value: v, selected: String(values[f.name] ?? "") === String(v) }, l); }));
     if (f.type === "textarea") return h("textarea", { ...base, maxlength: f.max || 3000, value: values[f.name] || "" });
-    if (f.type === "file") return h("input", { id, name: f.name, type: "file", accept: "image/jpeg,image/png,image/webp", multiple: true });
+    if (f.type === "file") return h("input", { id, name: f.name, type: "file", accept: "image/jpeg,image/png,image/webp", multiple: f.multiple !== false });
     return h("input", { ...base, type: f.type || "text", maxlength: f.type === "number" || f.type === "date" ? null : f.max || 120, minlength: f.min_len, min: f.min, step: f.step, value: values[f.name] ?? "" });
   };
   const field = f => h("label", { class: "field", for: "f-" + f.name }, f.label, control(f), f.hint ? h("span", { class: "hint" }, f.hint) : null);
@@ -200,8 +200,39 @@ async function uploadSlike(oglasId, files) {
   }
   return paths;
 }
+async function uploadGearImg(opremaId, file) {
+  const blob = await shrink(file);
+  const path = `${uid()}/oprema/${opremaId}/${crypto.randomUUID()}.jpg`;
+  await q(sb.storage.from("slike").upload(path, blob, { contentType: "image/jpeg", upsert: false }));
+  return path;
+}
 async function removeSlike(paths) {
   if (paths?.length) { const { error } = await sb.storage.from("slike").remove(paths); if (error) console.warn(error); }
+}
+
+function ytId(text) {
+  const t = String(text || "").trim();
+  if (!t) return null;
+  if (/^[A-Za-z0-9_-]{11}$/.test(t)) return t;
+  let u;
+  try { u = new URL(/^https?:\/\//i.test(t) ? t : "https://" + t); } catch { u = null; }
+  const host = u ? u.hostname.replace(/^(www\.|m\.|music\.)/, "") : "";
+  let id = null;
+  if (host === "youtu.be") id = u.pathname.slice(1).split("/")[0];
+  else if (host === "youtube.com" || host === "youtube-nocookie.com") {
+    id = u.searchParams.get("v") || (u.pathname.match(/^\/(?:shorts|embed|live|v)\/([^/?#]+)/) || [])[1];
+  }
+  if (id && /^[A-Za-z0-9_-]{11}$/.test(id)) return id;
+  throw new UserError("Poveznica na video nije ispravna. Zalijepi poveznicu s YouTubea, npr. https://youtu.be/…");
+}
+function videoBox(id, title) {
+  const box = h("div", { class: "video" });
+  const start = h("button", { class: "video-start", type: "button", onclick: () => {
+    box.replaceChildren(h("iframe", { src: `https://www.youtube-nocookie.com/embed/${id}?autoplay=1&rel=0`, title: "Video: " + title,
+      allow: "autoplay; encrypted-media; picture-in-picture; fullscreen", allowfullscreen: true, referrerpolicy: "strict-origin-when-cross-origin", loading: "lazy" }));
+  } }, h("span", { class: "video-play", "aria-hidden": "true" }, "▶"), h("span", {}, "Pokreni video"), h("small", {}, "Video se učitava s YouTubea tek kad klikneš."));
+  box.append(start);
+  return h("div", { class: "video-wrap" }, box, h("a", { href: `https://www.youtube.com/watch?v=${id}`, target: "_blank", rel: "noopener" }, "Otvori na YouTubeu"));
 }
 
 const oglasFields = edit => [
@@ -211,17 +242,18 @@ const oglasFields = edit => [
   [{ name: "grad", label: "Grad", required: true, max: 60 }, { name: "drzava", label: "Država", options: COUNTRIES, required: true }],
   { name: "opis", label: "Opis", type: "textarea", required: true },
   { name: "kontakt", label: "Kontakt", required: true, min_len: 3, hint: "Telefon ili e-mail. Vide ga samo prijavljeni korisnici." },
+  { name: "video", label: "YouTube video (nije obavezno)", type: "url", max: 200, hint: "Zalijepi poveznicu s YouTubea, npr. snimku u kojoj se instrument svira." },
   { name: "slike", label: `Fotografije (najviše ${MAX_SLIKA})`, type: "file", hint: edit ? "Ako odabereš nove, zamijenit će postojeće." : "JPG, PNG ili WebP. Smanjit ćemo ih prije slanja." },
 ];
 function oglasForm(existing) {
   if (needLogin()) return;
   openForm({
     title: existing ? "Uredi oglas" : "Novi oglas", submit: existing ? "Spremi promjene" : "Objavi oglas",
-    done: existing ? "Spremljeno" : "Objavljeno", values: existing || { valuta: "EUR" }, fields: oglasFields(!!existing),
+    done: existing ? "Spremljeno" : "Objavljeno", values: existing ? { ...existing, video: existing.video ? "https://youtu.be/" + existing.video : "" } : { valuta: "EUR" }, fields: oglasFields(!!existing),
     save: async (v, files) => {
       const id = existing?.id || crypto.randomUUID();
       const row = { naslov: v.naslov, kategorija: v.kategorija, stanje: v.stanje, cijena: v.cijena === "" ? null : Number(v.cijena),
-        valuta: v.valuta || "EUR", grad: v.grad, drzava: v.drzava, opis: v.opis, kontakt: v.kontakt };
+        valuta: v.valuta || "EUR", grad: v.grad, drzava: v.drzava, opis: v.opis, kontakt: v.kontakt, video: ytId(v.video) };
       let old = null;
       if (files.length) { row.slike = await uploadSlike(id, files); old = existing?.slike; }
       if (existing) await q(sb.from("oglasi").update(row).eq("id", id));
@@ -308,7 +340,7 @@ function featureBtns(tbl, o) {
 }
 const adRow = (o, tag = "summary", href) => h(tag, { class: "row thumbed" + (featured(o) ? " featured" : ""), href }, thumb(o), h("h3", {}, o.naslov),
   h("div", { class: "value" }, price(o)),
-  h("div", { class: "meta" }, featTag(o), h("span", {}, o.kategorija), h("span", {}, o.stanje), h("span", {}, place(o)), h("span", {}, nameOf(o.autor)), h("span", {}, date(o.created_at))));
+  h("div", { class: "meta" }, featTag(o), o.video ? h("span", { class: "tag" }, "▶ video") : null, h("span", {}, o.kategorija), h("span", {}, o.stanje), h("span", {}, place(o)), h("span", {}, nameOf(o.autor)), h("span", {}, date(o.created_at))));
 const jobRow = (o, tag = "summary", href) => h(tag, { class: "row" + (featured(o) ? " featured" : ""), href }, h("h3", {}, o.naslov),
   h("div", { class: "value" }, o.honorar || "Po dogovoru"),
   h("div", { class: "meta" }, featTag(o), h("span", {}, o.vrsta), h("span", {}, place(o)), o.rok ? h("span", {}, "Rok: " + day(o.rok)) : null, h("span", {}, nameOf(o.autor)), h("span", {}, date(o.created_at))));
@@ -318,13 +350,14 @@ const threadRow = t => h("a", { class: "row", href: "/tema/" + t.id }, h("h3", {
 const bars = g => h("div", { class: "bars" }, CRIT.map(([k, l]) => h("div", { class: "bar" }, h("span", {}, l),
   h("i", {}, h("b", { vars: { "--w": `${(Number(g[k]) || 0) / 5 * 100}%` } })), h("span", {}, g.broj_ocjena ? dec(g[k]) : "–"))));
 const scoreBox = g => h("div", { class: "score" }, g.broj_ocjena ? dec(g.prosjek) : "–", h("small", {}, plural(g.broj_ocjena || 0, "ocjena", "ocjene", "ocjena")));
-const gearCard = g => h("a", { class: "gear-card", href: "/oprema/" + g.id }, scoreBox(g), h("h3", {}, g.naziv), h("div", { class: "meta" }, h("span", {}, g.kategorija)), bars(g));
+const gearCard = g => h("a", { class: "gear-card", href: "/oprema/" + g.id }, g.slika ? h("img", { class: "gear-img", src: imgUrl(g.slika), alt: "", loading: "lazy" }) : null, scoreBox(g), h("h3", {}, g.naziv), h("div", { class: "meta" }, h("span", {}, g.kategorija)), bars(g));
 const fill = (el, items, emptyEl) => el.replaceChildren(...(items.length ? items : [emptyEl]));
 
 function adBody(o) {
   return [
     o.slike?.length ? h("div", { class: "gallery" }, o.slike.map((p, i) => h("button", { type: "button", class: "thumb-btn", "aria-label": `Otvori fotografiju ${i + 1} od ${o.slike.length}`, onclick: () => openGallery(o.slike, i, o.naslov) },
       h("img", { src: imgUrl(p), alt: o.naslov, loading: "lazy" })))) : null,
+    o.video ? videoBox(o.video, o.naslov) : null,
     h("p", {}, o.opis), contact(o),
     h("div", { class: "actions" },
       ...featureBtns("oglasi", o),
@@ -561,8 +594,14 @@ const views = {
     const add = () => {
       if (needLogin()) return;
       openForm({ title: "Nova oprema", submit: "Dodaj opremu", done: "Dodano",
-        fields: [{ name: "naziv", label: "Proizvođač i model", required: true, max: 90, min_len: 2 }, { name: "kategorija", label: "Kategorija", options: CATS, required: true }],
-        save: v => q(sb.from("oprema").insert({ naziv: v.naziv, kategorija: v.kategorija })) });
+        fields: [{ name: "naziv", label: "Proizvođač i model", required: true, max: 90, min_len: 2 }, { name: "kategorija", label: "Kategorija", options: CATS, required: true },
+          { name: "slika", label: "Fotografija (nije obavezno)", type: "file", multiple: false, hint: "Tvoja fotografija ovog modela. Ne koristi tuđe slike s interneta." }],
+        save: async (v, files) => {
+          const id = crypto.randomUUID();
+          const slika = files[0] ? await uploadGearImg(id, files[0]) : null;
+          try { await q(sb.from("oprema").insert({ id, naziv: v.naziv, kategorija: v.kategorija, slika })); }
+          catch (e) { await removeSlike(slika ? [slika] : []); throw e; }
+        } });
     };
     $("main").replaceChildren(
       pageHead("Ocjene opreme", "Svaki model ocjenjuje se od 1 do 5 za zvuk, izradu i vrijednost za novac.", h("button", { class: "btn", type: "button", onclick: add }, "Dodaj opremu")),
@@ -598,7 +637,17 @@ const views = {
     };
     setTitle(g.naziv);
     box.replaceChildren(metaHead(g.naziv, [h("span", {}, g.kategorija)], h("button", { class: "btn", type: "button", onclick: rate }, mine ? "Promijeni ocjenu" : "Ocijeni")),
-      h("div", { class: "post" }, scoreBox(g), bars(g), h("div", { class: "actions" }, delBtn(g, async () => { await q(sb.from("oprema").delete().eq("id", g.id)); go("/ocjene"); }), reportBtn("oprema", g, "/oprema/" + g.id, g.naziv))));
+      g.slika ? h("button", { type: "button", class: "thumb-btn gear-hero", "aria-label": "Povećaj fotografiju", onclick: () => openGallery([g.slika], 0, g.naziv) }, h("img", { src: imgUrl(g.slika), alt: g.naziv })) : null,
+      h("div", { class: "post" }, scoreBox(g), bars(g), h("div", { class: "actions" },
+        canEdit(g) ? h("button", { class: "btn small quiet", type: "button", onclick: () => openForm({ title: g.slika ? "Promijeni fotografiju" : "Dodaj fotografiju", submit: "Spremi fotografiju", done: "Fotografija je spremljena",
+          fields: [{ name: "slika", label: "Fotografija", type: "file", multiple: false, hint: "Tvoja fotografija ovog modela. Ne koristi tuđe slike s interneta." }],
+          save: async (v, files) => {
+            if (!files[0]) throw new UserError("Odaberi fotografiju.");
+            const path = await uploadGearImg(g.id, files[0]);
+            await q(sb.from("oprema").update({ slika: path }).eq("id", g.id));
+            await removeSlike(g.slika ? [g.slika] : []);
+          } }) }, g.slika ? "Promijeni fotografiju" : "Dodaj fotografiju") : null,
+        delBtn(g, async () => { await removeSlike(g.slika ? [g.slika] : []); await q(sb.from("oprema").delete().eq("id", g.id)); go("/ocjene"); }), reportBtn("oprema", g, "/oprema/" + g.id, g.naziv))));
     list.replaceChildren(h("h2", {}, "Iskustva korisnika"),
       ...(rs.length ? rs.map(r => h("article", { class: "post" },
         h("div", { class: "meta" }, h("span", {}, nameOf(r.autor)), h("span", {}, date(r.created_at)), ...CRIT.map(([k, l]) => h("span", {}, `${l} ${r[k]}/5`))),
