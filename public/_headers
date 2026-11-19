@@ -6,9 +6,11 @@
 
 /*.js
   Cache-Control: no-cache
+  Content-Type: text/javascript; charset=utf-8
 
 /*.css
   Cache-Control: no-cache
+  Content-Type: text/css; charset=utf-8
 
 /
   Cache-Control: no-cache
