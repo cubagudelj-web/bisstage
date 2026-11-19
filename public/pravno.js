@@ -3,7 +3,7 @@
 window.PRAVNO = {
   privatnost: {
     naslov: "Pravila privatnosti",
-    azurirano: "18. studenoga 2026.",
+    azurirano: "19. studenoga 2026.",
     uvod: "Ova pravila objašnjavaju koje osobne podatke BisStage prikuplja, zašto, gdje se čuvaju i koja su tvoja prava. Pisana su u skladu s Općom uredbom o zaštiti podataka (GDPR).",
     odjeljci: [
       ["Tko je odgovoran za tvoje podatke",
@@ -16,10 +16,10 @@ window.PRAVNO = {
         "Ne prikupljamo podatke o plaćanju, ne pratimo te po drugim stranicama i ne koristimo alate za analitiku ni oglašavanje."],
       ["Zašto ih koristimo",
         ["Da bismo ti omogućili korištenje BisStagea: registraciju, prijavu, objavljivanje i uređivanje sadržaja (pravna osnova: izvršenje ugovora, članak 6. stavak 1. točka (b) GDPR-a).",
-         "Da bismo ti slali e-poruke nužne za račun, poput potvrde registracije i promjene lozinke (ista pravna osnova). Ne šaljemo reklamne poruke.",
+         "Da bismo ti slali e-poruke nužne za račun, poput potvrde registracije i promjene lozinke, te obavijesti kad netko odgovori na tvoju temu na forumu (ista pravna osnova). Obavijesti o odgovorima možeš isključiti u Moj račun. Ne šaljemo reklamne poruke.",
          "Da bismo zaštitili stranicu i korisnike od zloupotrebe, spama i nezakonitog sadržaja (pravna osnova: legitimni interes, članak 6. stavak 1. točka (f) GDPR-a)."]],
       ["Tko vidi tvoje podatke",
-        ["Tvoje ime ili nadimak i sve što objaviš vidljivi su svim posjetiteljima stranice.",
+        ["Tvoje ime ili nadimak, mjesec i godina registracije te sve što objaviš vidljivi su svim posjetiteljima stranice, i to na tvom javnom profilu.",
          "Kontakt koji upišeš u oglas ili posao vide samo prijavljeni korisnici.",
          "Tvoja e-mail adresa nije javna. Vidi je samo upravitelj stranice.",
          "Upravitelj stranice može vidjeti sve podatke kad je to potrebno za rad stranice ili uklanjanje neprimjerenog sadržaja."],
@@ -27,7 +27,7 @@ window.PRAVNO = {
       ["Pružatelji usluga koji obrađuju podatke za nas",
         ["Supabase: baza podataka, prijava korisnika i spremanje fotografija. Podaci se čuvaju u Irskoj, u Europskoj uniji.",
          "Cloudflare: poslužitelj stranice i domena bisstage.com.",
-         "Resend: slanje e-poruka za potvrdu računa i promjenu lozinke, s poslužitelja u Irskoj.",
+         "Resend: slanje e-poruka za potvrdu računa, promjenu lozinke i obavijesti o odgovorima na forumu, s poslužitelja u Irskoj.",
          "jsDelivr: dostava programske biblioteke koja povezuje stranicu s bazom.",
          "YouTube (Google): ako oglas ima video, on se učitava s YouTubea tek kad klikneš Pokreni video. Tada YouTube prima tvoju IP adresu i podatke o pregledniku, prema svojim pravilima privatnosti. Koristimo način rada s pojačanom privatnošću (youtube-nocookie.com)."],
         "Neki od tih pružatelja su tvrtke sa sjedištem u SAD-u. Kad podaci mogu biti dostupni izvan Europskog gospodarskog prostora, prijenos se temelji na jamstvima koja propisuje GDPR, poput standardnih ugovornih klauzula Europske komisije."],
@@ -45,7 +45,7 @@ window.PRAVNO = {
          "zatražiti brisanje računa i svih podataka",
          "zatražiti ograničenje obrade ili prigovoriti obradi",
          "dobiti svoje podatke u strojno čitljivom obliku"],
-        "Zahtjev pošalji na kontakt@bisstage.com s e-mail adrese kojom si registriran. Odgovorit ćemo najkasnije u roku od mjesec dana.",
+        "Račun i sve svoje podatke možeš sam izbrisati u Moj račun, opcijom Izbriši račun. Ostale zahtjeve pošalji na kontakt@bisstage.com s e-mail adrese kojom si registriran. Odgovorit ćemo najkasnije u roku od mjesec dana.",
         "Ako smatraš da se tvoji podaci obrađuju protivno propisima, možeš podnijeti pritužbu Agenciji za zaštitu osobnih podataka (azop.hr)."],
       ["Dobna granica",
         "BisStage je namijenjen osobama od najmanje 16 godina. Ako saznamo da je račun otvorila mlađa osoba, izbrisat ćemo ga."],
@@ -56,7 +56,7 @@ window.PRAVNO = {
 
   uvjeti: {
     naslov: "Uvjeti korištenja",
-    azurirano: "18. studenoga 2026.",
+    azurirano: "19. studenoga 2026.",
     uvod: "Ovi uvjeti vrijede za sve koji koriste stranicu BisStage. Registracijom potvrđuješ da si ih pročitao i da ih prihvaćaš.",
     odjeljci: [
       ["O BisStageu",
@@ -93,7 +93,7 @@ window.PRAVNO = {
       ["Prijava neprimjerenog sadržaja",
         "Ako uočiš sadržaj koji krši ove uvjete ili zakon, klikni gumb Prijavi uz tu objavu. Možeš nam pisati i na kontakt@bisstage.com, uz poveznicu ili naslov objave."],
       ["Brisanje računa",
-        "Svoj račun možeš izbrisati u svakom trenutku. Zahtjev pošalji na kontakt@bisstage.com s e-mail adrese kojom si registriran. Brisanjem računa brišu se i sve tvoje objave."],
+        "Svoj račun možeš izbrisati u svakom trenutku u Moj račun, opcijom Izbriši račun. Brisanjem računa trajno se brišu i sve tvoje objave, ocjene i fotografije."],
       ["Izmjene uvjeta",
         "Ako promijenimo ove uvjete, objavit ćemo novu verziju na ovoj stranici. Ako nastaviš koristiti BisStage nakon izmjene, prihvaćaš nove uvjete. O važnim izmjenama obavijestit ćemo registrirane korisnike e-poštom."],
       ["Mjerodavno pravo",

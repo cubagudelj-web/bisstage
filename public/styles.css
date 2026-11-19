@@ -153,6 +153,14 @@ dialog.lightbox::backdrop { background: rgba(5, 6, 18, .88); }
 .gear-img { grid-column: 1 / -1; width: 100%; aspect-ratio: 4 / 3; object-fit: cover; border-radius: 6px; background: var(--accent-soft); margin-bottom: 8px; }
 .gear-hero { max-width: 520px; }
 .gear-hero img { width: 100%; aspect-ratio: 4 / 3; object-fit: cover; border-radius: 8px; display: block; }
+a.author { color: inherit; text-decoration: underline; text-decoration-color: var(--rule); text-underline-offset: 3px; }
+a.author:hover { color: var(--accent); text-decoration-color: currentColor; }
+.by { color: var(--muted); font-size: .9rem; }
+.my-posts { max-width: 1120px; margin-top: 12px; }
+.my-posts h2 { font-size: 1.5rem; font-weight: 800; }
+.danger-zone { border-top: 1px solid var(--rule); padding-top: 12px; }
+.danger-zone summary { cursor: pointer; color: var(--bad); font-weight: 600; font-size: .92rem; }
+.danger-zone p { margin: 8px 0; font-size: .92rem; }
 .chips { display: flex; flex-wrap: wrap; gap: 6px; }
 .chip { font: 500 .9rem/1 var(--body); color: var(--fg); background: transparent; border: 1px solid var(--rule); border-radius: 6px; padding: 7px 10px; cursor: pointer; }
 .chip[aria-pressed="true"] { background: var(--accent); border-color: var(--accent); color: var(--accent-fg); }

@@ -24,7 +24,7 @@ let sb = null;
 let session = null;
 let me = null; // { id, ime, admin }
 let navToken = 0;
-const filters = { prijave: { tab: "otvorene" }, oglasi: { q: "", cat: "", drzava: "" }, poslovi: { q: "", vrsta: "", drzava: "" }, forum: { kat: "" }, ocjene: { q: "", kat: "" } };
+const filters = { prijave: { tab: "otvorene" }, mojeObjave: { tab: "oglasi" }, oglasi: { q: "", cat: "", drzava: "" }, poslovi: { q: "", vrsta: "", drzava: "" }, forum: { q: "", kat: "" }, ocjene: { q: "", kat: "" } };
 const open = new Set();
 const nameCache = new Map();
 
@@ -111,6 +111,7 @@ async function loadNames(ids) {
   }
 }
 const nameOf = id => nameCache.get(id) || "Član";
+const authorLink = id => h("a", { class: "author", href: "/korisnik/" + id }, nameOf(id));
 
 function needLogin() {
   if (session) return false;
@@ -358,7 +359,7 @@ function adBody(o) {
     o.slike?.length ? h("div", { class: "gallery" }, o.slike.map((p, i) => h("button", { type: "button", class: "thumb-btn", "aria-label": `Otvori fotografiju ${i + 1} od ${o.slike.length}`, onclick: () => openGallery(o.slike, i, o.naslov) },
       h("img", { src: imgUrl(p), alt: o.naslov, loading: "lazy" })))) : null,
     o.video ? videoBox(o.video, o.naslov) : null,
-    h("p", {}, o.opis), contact(o),
+    h("p", {}, o.opis), h("p", { class: "by" }, "Objavio: ", authorLink(o.autor)), contact(o),
     h("div", { class: "actions" },
       ...featureBtns("oglasi", o),
       canEdit(o) ? h("button", { class: "btn small quiet", type: "button", onclick: () => oglasForm(o) }, "Uredi") : null,
@@ -461,7 +462,7 @@ function bandFx(canvas) {
 }
 
 function jobBody(o) {
-  return [h("p", {}, o.opis), contact(o), h("div", { class: "actions" },
+  return [h("p", {}, o.opis), h("p", { class: "by" }, "Objavio: ", authorLink(o.autor)), contact(o), h("div", { class: "actions" },
     ...featureBtns("poslovi", o),
     canEdit(o) ? h("button", { class: "btn small quiet", type: "button", onclick: () => posaoForm(o) }, "Uredi") : null,
     delBtn(o, () => q(sb.from("poslovi").delete().eq("id", o.id))),
@@ -549,13 +550,15 @@ const views = {
         fields: [{ name: "naslov", label: "Naslov", required: true, max: 120, min_len: 3 }, { name: "kategorija", label: "Kategorija", options: TOPICS, required: true }, { name: "tekst", label: "Tekst", type: "textarea", required: true, max: 5000 }],
         save: v => q(sb.from("teme").insert({ naslov: v.naslov, kategorija: v.kategorija, tekst: v.tekst })) });
     };
-    $("main").replaceChildren(pageHead("Forum", "Pitanja, savjeti i razgovori među glazbenicima.", h("button", { class: "btn", type: "button", onclick: newTopic }, "Otvori temu")), chips, list);
+    $("main").replaceChildren(pageHead("Forum", "Pitanja, savjeti i razgovori među glazbenicima.", h("button", { class: "btn", type: "button", onclick: newTopic }, "Otvori temu")),
+      h("div", { class: "tools one" }, search("q-forum", "Pretraži teme", st, "npr. ozvučenje, svadba"), h("span")), chips, list);
     const rows = await q(sb.from("teme_pregled").select("*").order("created_at", { ascending: false }).limit(LIMIT));
     await loadNames(rows.map(r => r.autor));
     if (!alive()) return;
     redraw = () => {
       chips.replaceChildren(...["", ...TOPICS].map(k => h("button", { class: "chip", type: "button", "aria-pressed": String(st.kat === k), onclick: () => { st.kat = k; redraw(); } }, k || "Sve teme")));
-      fill(list, rows.filter(t => !st.kat || t.kategorija === st.kat).map(threadRow), rows.length ? emptyBox("Nema tema u ovoj kategoriji", "Odaberi drugu ili otvori novu temu.") : emptyBox("Još nema tema", "Otvori prvu temu."));
+      fill(list, rows.filter(t => (!st.kat || t.kategorija === st.kat) && hit(st.q, t.naslov, t.tekst)).map(threadRow),
+        rows.length ? emptyBox("Nema takvih tema", "Promijeni pretragu ili kategoriju, ili otvori novu temu.") : emptyBox("Još nema tema", "Otvori prvu temu."));
     };
     redraw();
   },
@@ -569,7 +572,7 @@ const views = {
     await loadNames([t.autor, ...rs.map(r => r.autor)]);
     if (!alive()) return;
     setTitle(t.naslov);
-    box.replaceChildren(metaHead(t.naslov, [h("span", {}, t.kategorija), h("span", {}, nameOf(t.autor)), h("span", {}, date(t.created_at))]),
+    box.replaceChildren(metaHead(t.naslov, [h("span", {}, t.kategorija), authorLink(t.autor), h("span", {}, date(t.created_at))]),
       h("article", { class: "post" }, h("p", { class: "prose" }, t.tekst), h("div", { class: "actions" }, delBtn(t, async () => { await q(sb.from("teme").delete().eq("id", t.id)); go("/forum"); }), reportBtn("tema", t, "/tema/" + t.id, t.naslov))));
     let form;
     if (session) {
@@ -585,7 +588,7 @@ const views = {
       form = h("p", {}, h("a", { href: "/prijava", onclick: () => { try { sessionStorage.setItem("povratak", location.pathname); } catch {} } }, "Prijavi se"), " da odgovoriš.");
     }
     list.replaceChildren(h("h2", {}, plural(rs.length, "odgovor", "odgovora", "odgovora")),
-      ...rs.map(r => h("article", { class: "post" }, h("div", { class: "meta" }, h("span", {}, nameOf(r.autor)), h("span", {}, date(r.created_at))), h("p", { class: "prose" }, r.tekst),
+      ...rs.map(r => h("article", { class: "post" }, h("div", { class: "meta" }, authorLink(r.autor), h("span", {}, date(r.created_at))), h("p", { class: "prose" }, r.tekst),
         h("div", { class: "actions" }, delBtn(r, () => q(sb.from("odgovori").delete().eq("id", r.id))), reportBtn("odgovor", r, "/tema/" + t.id, "Odgovor u temi: " + t.naslov)))), form);
   },
 
@@ -650,7 +653,7 @@ const views = {
         delBtn(g, async () => { await removeSlike(g.slika ? [g.slika] : []); await q(sb.from("oprema").delete().eq("id", g.id)); go("/ocjene"); }), reportBtn("oprema", g, "/oprema/" + g.id, g.naziv))));
     list.replaceChildren(h("h2", {}, "Iskustva korisnika"),
       ...(rs.length ? rs.map(r => h("article", { class: "post" },
-        h("div", { class: "meta" }, h("span", {}, nameOf(r.autor)), h("span", {}, date(r.created_at)), ...CRIT.map(([k, l]) => h("span", {}, `${l} ${r[k]}/5`))),
+        h("div", { class: "meta" }, authorLink(r.autor), h("span", {}, date(r.created_at)), ...CRIT.map(([k, l]) => h("span", {}, `${l} ${r[k]}/5`))),
         h("p", { class: "prose" }, r.tekst), h("div", { class: "actions" }, delBtn(r, () => q(sb.from("recenzije").delete().eq("id", r.id))), reportBtn("recenzija", r, "/oprema/" + g.id, "Ocjena za: " + g.naziv)))) : [emptyBox("Još nema ocjena", "Budi prvi koji će ocijeniti ovaj model.")]));
   },
 
@@ -661,7 +664,7 @@ const views = {
     if (!alive()) return;
     if (o) setTitle(o.naslov);
     $("main").replaceChildren(h("a", { class: "back", href: "/oglasi" }, "Natrag na oglasnik"), !o ? emptyBox("Ovaj oglas više ne postoji", "Možda je prodano. Pogledaj ostale oglase.") :
-      h("div", { class: "stack" }, metaHead(o.naslov, [h("span", {}, o.kategorija), h("span", {}, o.stanje), h("span", {}, place(o)), h("span", {}, nameOf(o.autor)), h("span", {}, date(o.created_at))], h("div", { class: "value big" }, price(o))),
+      h("div", { class: "stack" }, metaHead(o.naslov, [h("span", {}, o.kategorija), h("span", {}, o.stanje), h("span", {}, place(o)), authorLink(o.autor), h("span", {}, date(o.created_at))], h("div", { class: "value big" }, price(o))),
         h("article", { class: "post" }, adBody(o))));
   },
 
@@ -672,7 +675,7 @@ const views = {
     if (!alive()) return;
     if (o) setTitle(o.naslov);
     $("main").replaceChildren(h("a", { class: "back", href: "/poslovi" }, "Natrag na burzu poslova"), !o ? emptyBox("Ovaj posao više ne postoji", "Pogledaj ostale poslove.") :
-      h("div", { class: "stack" }, metaHead(o.naslov, [h("span", {}, o.vrsta), h("span", {}, place(o)), o.rok ? h("span", {}, "Rok: " + day(o.rok)) : null, h("span", {}, nameOf(o.autor)), h("span", {}, date(o.created_at))], h("div", { class: "value big" }, o.honorar || "Po dogovoru")),
+      h("div", { class: "stack" }, metaHead(o.naslov, [h("span", {}, o.vrsta), h("span", {}, place(o)), o.rok ? h("span", {}, "Rok: " + day(o.rok)) : null, authorLink(o.autor), h("span", {}, date(o.created_at))], h("div", { class: "value big" }, o.honorar || "Po dogovoru")),
         h("article", { class: "post" }, jobBody(o))));
   },
 
@@ -755,13 +758,40 @@ const views = {
       }, [], false);
   },
 
+  async korisnik(id, alive) {
+    $("main").replaceChildren(loading());
+    const [[p], og, po, te] = await Promise.all([
+      q(sb.from("profili").select("id,ime,created_at").eq("id", id).limit(1)),
+      q(sb.from("oglasi").select(OGLAS_JAVNO).eq("autor", id).order("created_at", { ascending: false }).limit(100)),
+      q(sb.from("poslovi").select(POSAO_JAVNO).eq("autor", id).order("created_at", { ascending: false }).limit(100)),
+      q(sb.from("teme_pregled").select("*").eq("autor", id).order("created_at", { ascending: false }).limit(100)),
+    ]);
+    if (!alive()) return;
+    if (!p) { $("main").replaceChildren(emptyBox("Ovaj korisnik više ne postoji", "Možda je izbrisao račun.")); return; }
+    nameCache.set(p.id, p.ime);
+    setTitle(p.ime);
+    const sec = (title, items, empty) => h("section", { class: "stack" }, h("h2", {}, title), items.length ? h("div", { class: "rows" }, items) : emptyBox(null, empty));
+    $("main").replaceChildren(
+      pageHead(p.ime, `Član od ${["siječnja","veljače","ožujka","travnja","svibnja","lipnja","srpnja","kolovoza","rujna","listopada","studenoga","prosinca"][new Date(p.created_at).getMonth()]} ${new Date(p.created_at).getFullYear()}. · ${plural(og.length, "oglas", "oglasa", "oglasa")} · ${plural(te.length, "tema", "teme", "tema")} na forumu`),
+      sec("Oglasi", featFirst(og).map(o => adRow(o, "a", "/oglas/" + o.id)), "Nema aktivnih oglasa."),
+      po.length ? sec("Poslovi", po.map(o => jobRow(o, "a", "/posao/" + o.id)), "") : null,
+      sec("Teme na forumu", te.map(threadRow), "Još nije otvorio nijednu temu."));
+  },
+
   async racun(_, alive) {
     if (!session) { go("/prijava"); return; }
     const err = h("p", { class: "err", role: "alert" });
     const name = h("input", { id: "r-ime", required: true, maxlength: 60, value: me?.ime || "" });
     const save = h("button", { class: "btn", type: "submit" }, "Spremi ime");
-    const counts = h("p", {}, "Učitavam tvoje objave…");
-    $("main").replaceChildren(h("div", { class: "auth" },
+    const notif = h("input", { id: "r-obavijesti", type: "checkbox", checked: true, disabled: true });
+    notif.addEventListener("change", async () => {
+      notif.disabled = true;
+      try { await q(sb.from("postavke").upsert({ id: uid(), obavijesti_forum: notif.checked })); toast(notif.checked ? "Obavijesti su uključene" : "Obavijesti su isključene"); }
+      catch (x) { notif.checked = !notif.checked; toast(errText(x)); }
+      notif.disabled = false;
+    });
+    const mine = h("div", { class: "rows" }, loading()), tabs = h("div", { class: "chips" });
+    const settings = h("div", { class: "auth" },
       h("h1", {}, "Moj račun"),
       h("p", {}, session.user.email),
       h("form", { onsubmit: async e => {
@@ -770,17 +800,57 @@ const views = {
         catch (x) { err.textContent = errText(x); }
         save.disabled = false;
       } }, h("label", { class: "field", for: "r-ime" }, "Ime koje drugi vide", name), err, h("div", {}, save)),
-      counts,
+      h("label", { class: "check", for: "r-obavijesti" }, notif, h("span", {}, "Pošalji mi e-poruku kad netko odgovori na moju temu na forumu")),
       me?.admin ? h("p", {}, h("span", { class: "tag" }, "Administrator"), " Možeš brisati sve objave. ", h("a", { href: "/prijave" }, reportCount ? `Otvorene prijave: ${reportCount}` : "Pregled prijava")) : null,
-      h("p", {}, "Za brisanje računa i svih podataka piši na ", h("a", { href: "mailto:kontakt@bisstage.com" }, "kontakt@bisstage.com"), " s ove e-mail adrese."),
       h("div", { class: "actions" },
+        h("a", { class: "btn quiet", href: "/korisnik/" + uid() }, "Moj javni profil"),
         h("a", { class: "btn quiet", href: "/zaboravljena-lozinka" }, "Promijeni lozinku"),
-        h("button", { class: "btn danger", type: "button", onclick: async () => { await sb.auth.signOut(); go("/"); toast("Odjavljen si"); } }, "Odjavi se"))));
-    const c = tbl => sb.from(tbl).select("id", { count: "exact", head: true }).eq("autor", uid()).then(r => r.count ?? 0);
-    const [o, p, t] = await Promise.all([c("oglasi"), c("poslovi"), c("teme")]);
-    if (alive()) counts.textContent = `Objavio si ${plural(o, "oglas", "oglasa", "oglasa")}, ${plural(p, "posao", "posla", "poslova")} i ${plural(t, "temu", "teme", "tema")}.`;
+        h("button", { class: "btn danger", type: "button", onclick: async () => { await sb.auth.signOut(); go("/"); toast("Odjavljen si"); } }, "Odjavi se")),
+      h("details", { class: "danger-zone" }, h("summary", {}, "Izbriši račun"),
+        h("p", {}, "Brisanjem računa trajno se brišu tvoj profil, svi oglasi, poslovi, teme, odgovori, ocjene i fotografije. To se ne može poništiti."),
+        h("button", { class: "btn confirm", type: "button", onclick: deleteAccount }, "Izbriši moj račun")));
+    $("main").replaceChildren(settings, h("section", { class: "stack my-posts" }, h("h2", {}, "Moje objave"), tabs, mine));
+
+    const [pref, og, po, te] = await Promise.all([
+      q(sb.from("postavke").select("obavijesti_forum").eq("id", uid()).limit(1)).catch(() => []),
+      q(sb.from("oglasi").select(OGLAS_JAVNO + ",kontakt").eq("autor", uid()).order("created_at", { ascending: false })),
+      q(sb.from("poslovi").select(POSAO_JAVNO + ",kontakt").eq("autor", uid()).order("created_at", { ascending: false })),
+      q(sb.from("teme_pregled").select("*").eq("autor", uid()).order("created_at", { ascending: false })),
+    ]);
+    if (!alive()) return;
+    notif.checked = pref[0]?.obavijesti_forum ?? true; notif.disabled = false;
+    const st = filters.mojeObjave;
+    const lists = {
+      oglasi: [`Oglasi (${og.length})`, () => og.map(o => expander("o" + o.id, adRow(o), adBody(o))), ["Još nemaš oglasa", "Objavi prvi oglas u Oglasniku."]],
+      poslovi: [`Poslovi (${po.length})`, () => po.map(o => expander("p" + o.id, jobRow(o), jobBody(o))), ["Još nemaš poslova", "Objavi posao na Burzi poslova."]],
+      teme: [`Teme (${te.length})`, () => te.map(threadRow), ["Još nemaš tema", "Otvori temu na Forumu."]],
+    };
+    redraw = () => {
+      tabs.replaceChildren(...Object.entries(lists).map(([k, [l]]) => h("button", { class: "chip", type: "button", "aria-pressed": String(st.tab === k), onclick: () => { st.tab = k; redraw(); } }, l)));
+      const [, items, [et, ex]] = lists[st.tab];
+      fill(mine, items(), emptyBox(et, ex));
+    };
+    redraw();
   },
+
 };
+
+function deleteAccount() {
+  openForm({ title: "Izbriši račun", submit: "Trajno izbriši račun", done: "Račun je izbrisan",
+    fields: [{ name: "potvrda", label: "Za potvrdu upiši IZBRIŠI", required: true, max: 20, hint: "Brišu se profil, sve objave, ocjene i fotografije. To se ne može poništiti." }],
+    save: async v => {
+      if (v.potvrda.toUpperCase() !== "IZBRIŠI") throw new UserError("Upiši točno riječ IZBRIŠI.");
+      const [og, op] = await Promise.all([
+        q(sb.from("oglasi").select("slike").eq("autor", uid())),
+        q(sb.from("oprema").select("slika").eq("autor", uid())),
+      ]);
+      const paths = [...og.flatMap(o => o.slike || []), ...op.map(o => o.slika).filter(Boolean)];
+      for (let i = 0; i < paths.length; i += 100) await removeSlike(paths.slice(i, i + 100));
+      await q(sb.rpc("obrisi_racun"));
+      await sb.auth.signOut();
+      go("/");
+    } });
+}
 
 function legalPage(d) {
   const mail = t => {
@@ -844,7 +914,7 @@ async function route(keepScroll) {
   const token = ++navToken;
   const alive = () => token === navToken;
   const raw = location.pathname.replace(/^\/+|\/+$/g, "") || "pocetna";
-  const m = raw.match(/^(tema|oprema|oglas|posao)\/([0-9a-f-]{36})$/);
+  const m = raw.match(/^(tema|oprema|oglas|posao|korisnik)\/([0-9a-f-]{36})$/);
   const name = m ? m[1] : views[raw] ? raw : "pocetna";
   redraw = () => {};
   if (!keepScroll) open.clear(); // prelaskom na drugi dio stranice otvoreni oglasi se zatvaraju
