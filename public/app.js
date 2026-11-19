@@ -302,7 +302,14 @@ function contact(o) {
   return h("div", { class: "contact" }, "Kontakt:", h("code", {}, o.kontakt), c);
 }
 function expander(key, summary, body) {
-  const d = h("details", { open: open.has(key), ontoggle: () => { d.open ? open.add(key) : open.delete(key); } }, summary);
+  // Otvaranjem jednog oglasa zatvaraju se ostali na istom popisu.
+  const d = h("details", { "data-key": key, open: open.has(key), ontoggle: () => {
+    if (!d.open) { open.delete(key); return; }
+    open.add(key);
+    d.parentElement?.querySelectorAll(":scope > details[open]").forEach(o => { if (o !== d) { o.open = false; open.delete(o.dataset.key); } });
+    const top = d.getBoundingClientRect().top;
+    if (top < 60) d.scrollIntoView({ block: "start", behavior: matchMedia("(prefers-reduced-motion: reduce)").matches ? "auto" : "smooth" });
+  } }, summary);
   d.append(h("div", { class: "more" }, body));
   return d;
 }
