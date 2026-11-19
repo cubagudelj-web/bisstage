@@ -9,7 +9,7 @@ Zajednica glazbenika iz Hrvatske i regije: oglasnik instrumenata, burza poslova,
 | `public/` | Cloudflare Pages | Stranica koju posjetitelji vide (HTML, CSS, JavaScript, bez izgradnje) |
 | `supabase/schema.sql` | Supabase | Baza podataka, sigurnosna pravila i spremište fotografija |
 | `public/config.js` | | Adresa Supabase projekta i javni ključ |
-| `functions/`, `lib/seo.js` | Cloudflare Pages Functions | Naslov, opis i slika za Google i pregled pri dijeljenju (`/oglas/<id>`, `/posao/<id>`, `/tema/<id>`, `/oprema/<id>`) te `sitemap.xml` |
+| `functions/`, `lib/seo.js` | Cloudflare Pages Functions | Naslov, opis i slika za Google i pregled pri dijeljenju (`/oglas/<id>`, `/posao/<id>`, `/tema/<id>`, `/oprema/<id>`, `/dogadaj/<id>`) te `sitemap.xml` |
 
 Javni (`sb_publishable_`) ključ smije biti u kodu. Podatke štite pravila u `schema.sql`.
 Tajni ključ (`sb_secret_` ili `service_role`) nikada ne ide u ovaj repozitorij.
@@ -24,6 +24,7 @@ Tajni ključ (`sb_secret_` ili `service_role`) nikada ne ide u ovaj repozitorij.
 5. Zatim, jednom, `supabase/04-video-slike.sql` (YouTube video u oglasima, fotografija opreme).
 6. Zatim, jednom, `supabase/05-racun-obavijesti.sql` (brisanje računa, postavke, obavijesti o odgovorima).
 7. Zatim, jednom, `supabase/06-profilna-slika.sql` (profilna slika).
+8. Zatim, jednom, `supabase/07-dogadaji.sql` (rubrika Događaji).
 
 ### Obavijesti e-poštom
 U Resendu napravi API ključ (Sending access, domena bisstage.com). U Supabaseu: **Integrations → Vault → Add new secret**, naziv `resend_api_key`, vrijednost ključ. Bez toga se obavijesti jednostavno ne šalju.

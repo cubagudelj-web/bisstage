@@ -10,6 +10,8 @@ const CONDS = ["Novo", "Kao novo", "Korišteno", "Za popravak"];
 const CURS = { EUR: "€", KM: "KM", RSD: "RSD", MKD: "MKD" };
 const JOBS = ["Svirka", "Stalni angažman", "Studijsko snimanje", "Poduka", "Bend traži člana"];
 const TOPICS = ["Instrumenti", "Bendovi i svirke", "Kućni studio", "Učenje i poduka", "Razgovor"];
+const EVENT_TYPES = ["Koncert", "Festival", "Tečaj ili radionica", "Jam session", "Audicija ili natjecanje", "Sajam opreme", "Ostalo"];
+const MJ = ["sij", "velj", "ožu", "tra", "svi", "lip", "srp", "kol", "ruj", "lis", "stu", "pro"];
 const CRIT = [["zvuk", "Zvuk"], ["izrada", "Izrada"], ["vrijednost", "Vrijednost"]];
 const MAX_SLIKA = 4;
 const LIMIT = 300;
@@ -24,7 +26,7 @@ let sb = null;
 let session = null;
 let me = null; // { id, ime, admin }
 let navToken = 0;
-const filters = { prijave: { tab: "otvorene" }, mojeObjave: { tab: "oglasi" }, oglasi: { q: "", cat: "", drzava: "" }, poslovi: { q: "", vrsta: "", drzava: "" }, forum: { q: "", kat: "" }, ocjene: { q: "", kat: "" } };
+const filters = { dogadaji: { q: "", vrsta: "", drzava: "" }, prijave: { tab: "otvorene" }, mojeObjave: { tab: "oglasi" }, oglasi: { q: "", cat: "", drzava: "" }, poslovi: { q: "", vrsta: "", drzava: "" }, forum: { q: "", kat: "" }, ocjene: { q: "", kat: "" } };
 const open = new Set();
 const nameCache = new Map();
 const avatarCache = new Map();
@@ -476,6 +478,89 @@ function bandFx(canvas) {
   if (still) draw(t0 + 4000); else raf = requestAnimationFrame(loop);
 }
 
+/* ---------------- Događaji: pomoćne funkcije ---------------- */
+const pad = n => String(n).padStart(2, "0");
+const toLocalInput = iso => { if (!iso) return ""; const d = new Date(iso); return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}`; };
+const hm = d => `${d.getHours()}:${pad(d.getMinutes())}`;
+const sameDay = (a, b) => a.getFullYear() === b.getFullYear() && a.getMonth() === b.getMonth() && a.getDate() === b.getDate();
+const dayStart = d => new Date(d.getFullYear(), d.getMonth(), d.getDate());
+function whenText(e) {
+  const a = new Date(e.pocetak), b = e.kraj ? new Date(e.kraj) : null;
+  const dl = d => d.toLocaleDateString("hr-HR", { weekday: "long", day: "numeric", month: "numeric", year: "numeric" });
+  if (!b) return `${dl(a)} u ${hm(a)}`;
+  if (sameDay(a, b)) return `${dl(a)}, ${hm(a)} – ${hm(b)}`;
+  return `${a.toLocaleDateString("hr-HR")} ${hm(a)} – ${b.toLocaleDateString("hr-HR")} ${hm(b)}`;
+}
+function dayLabel(e, today) {
+  const a = new Date(e.pocetak);
+  if (a < today) return "U tijeku";
+  const diff = Math.round((dayStart(a) - today) / 864e5);
+  if (diff === 0) return "Danas";
+  if (diff === 1) return "Sutra";
+  const t = a.toLocaleDateString("hr-HR", { weekday: "long", day: "numeric", month: "long" });
+  return t[0].toUpperCase() + t.slice(1);
+}
+const dateTile = e => { const a = new Date(e.pocetak); return h("span", { class: "date-tile", "aria-hidden": "true" }, h("b", {}, a.getDate()), h("small", {}, MJ[a.getMonth()])); };
+const eventRow = e => h("a", { class: "row event", href: "/dogadaj/" + e.id }, dateTile(e), h("h3", {}, e.naziv),
+  h("div", { class: "value" }, e.ulaz || ""),
+  h("div", { class: "meta" }, h("span", { class: "tag" }, e.vrsta), h("span", {}, hm(new Date(e.pocetak))), h("span", {}, e.mjesto), h("span", {}, place(e))));
+const upcoming = () => {
+  const today = dayStart(new Date()).toISOString(), now = new Date().toISOString();
+  return sb.from("dogadaji").select("*").or(`pocetak.gte.${today},kraj.gte.${now}`).order("pocetak");
+};
+function calLinks(e) {
+  const a = new Date(e.pocetak), b = e.kraj ? new Date(e.kraj) : new Date(a.getTime() + 2 * 36e5);
+  const z = d => d.toISOString().replace(/[-:]/g, "").replace(/\.\d{3}/, "");
+  const where = [e.mjesto, e.grad, e.drzava].filter(Boolean).join(", ");
+  const url = location.origin + "/dogadaj/" + e.id;
+  const g = "https://calendar.google.com/calendar/render?" + new URLSearchParams({ action: "TEMPLATE", text: e.naziv, dates: `${z(a)}/${z(b)}`, location: where, details: url });
+  const icsEsc = t => String(t).replace(/\\/g, "\\\\").replace(/[,;]/g, m => "\\" + m).replace(/\r?\n/g, "\\n");
+  const ics = ["BEGIN:VCALENDAR", "VERSION:2.0", "PRODID:-//BisStage//HR", "BEGIN:VEVENT", `UID:${e.id}@bisstage.com`, `DTSTAMP:${z(new Date())}`,
+    `DTSTART:${z(a)}`, `DTEND:${z(b)}`, `SUMMARY:${icsEsc(e.naziv)}`, `LOCATION:${icsEsc(where)}`, `URL:${url}`, "END:VEVENT", "END:VCALENDAR"].join("\r\n");
+  const icsHref = URL.createObjectURL(new Blob([ics], { type: "text/calendar" }));
+  return [h("a", { class: "btn small quiet", href: g, target: "_blank", rel: "noopener" }, "Dodaj u Google kalendar"),
+    h("a", { class: "btn small quiet", href: icsHref, download: "bisstage-dogadaj.ics" }, "Preuzmi za kalendar (.ics)")];
+}
+function eventForm(existing) {
+  if (needLogin()) return;
+  openForm({
+    title: existing ? "Uredi događaj" : "Novi događaj", submit: existing ? "Spremi promjene" : "Objavi događaj", done: existing ? "Spremljeno" : "Objavljeno",
+    values: existing ? { ...existing, pocetak: toLocalInput(existing.pocetak), kraj: toLocalInput(existing.kraj) } : {},
+    fields: [
+      { name: "naziv", label: "Naziv događaja", required: true, max: 120, min_len: 3 },
+      { name: "vrsta", label: "Vrsta", options: EVENT_TYPES, placeholder: "Odaberi", required: true },
+      [{ name: "pocetak", label: "Početak", type: "datetime-local", required: true }, { name: "kraj", label: "Završetak (nije obavezno)", type: "datetime-local" }],
+      { name: "mjesto", label: "Mjesto održavanja", required: true, max: 120, hint: "npr. Dom kulture, klub Boogaloo, Trg bana Jelačića" },
+      [{ name: "grad", label: "Grad", required: true, max: 60 }, { name: "drzava", label: "Država", options: COUNTRIES, required: true }],
+      { name: "ulaz", label: "Ulaz (nije obavezno)", max: 60, hint: "npr. Besplatno, 10 €, pretprodaja 8 €" },
+      { name: "poveznica", label: "Poveznica za ulaznice ili više informacija (nije obavezno)", type: "url", max: 300 },
+      { name: "opis", label: "Opis", type: "textarea", required: true },
+      { name: "plakat", label: "Plakat ili fotografija (nije obavezno)", type: "file", multiple: false, hint: existing?.plakat ? "Ako odabereš novu, zamijenit će postojeću." : "Koristi plakat ili fotografiju za koju imaš pravo objave." }],
+    save: async (v, files) => {
+      const start = new Date(v.pocetak), end = v.kraj ? new Date(v.kraj) : null;
+      if (isNaN(start)) throw new UserError("Upiši datum i vrijeme početka.");
+      if (end && end < start) throw new UserError("Završetak ne može biti prije početka.");
+      if (!existing && start < new Date(Date.now() - 864e5)) throw new UserError("Početak je u prošlosti. Provjeri datum.");
+      let link = v.poveznica || null;
+      if (link && !/^https?:\/\//i.test(link)) link = "https://" + link;
+      if (link && !/^https?:\/\/[^\s<>"]+$/.test(link)) throw new UserError("Poveznica nije ispravna.");
+      const id = existing?.id || crypto.randomUUID();
+      const row = { naziv: v.naziv, vrsta: v.vrsta, pocetak: start.toISOString(), kraj: end ? end.toISOString() : null, mjesto: v.mjesto, grad: v.grad, drzava: v.drzava,
+        ulaz: v.ulaz || null, poveznica: link, opis: v.opis };
+      let old = null;
+      if (files[0]) {
+        const blob = await shrink(files[0]);
+        row.plakat = `${uid()}/dogadaji/${id}/${crypto.randomUUID()}.jpg`;
+        await q(sb.storage.from("slike").upload(row.plakat, blob, { contentType: "image/jpeg", upsert: false }));
+        old = existing?.plakat;
+      }
+      if (existing) await q(sb.from("dogadaji").update(row).eq("id", id));
+      else await q(sb.from("dogadaji").insert({ id, ...row }));
+      if (old) await removeSlike([old]);
+    },
+  });
+}
+
 function jobBody(o) {
   return [h("p", {}, o.opis), h("p", { class: "by" }, "Objavio: ", authorLink(o.autor)), contact(o), h("div", { class: "actions" },
     ...featureBtns("poslovi", o),
@@ -495,16 +580,18 @@ const views = {
       cls.includes("low") ? h("span", { class: "ledger" }) : null, h("span", { class: "stem" }), h("span", { class: "head" }, h("span", { "data-c": key }, "–")), h("span", { class: "label" }, label));
     const fx = h("canvas", { class: "band-fx", "aria-hidden": "true" });
     $("hero").replaceChildren(h("section", { class: "band" }, fx, h("div", { class: "wrap" },
-      h("div", {}, h("h1", {}, "BisStage"), h("p", { class: "lead" }, "Kupi i prodaj instrumente, nađi svirku, pitaj kolege i ocijeni opremu. Za glazbenike iz Hrvatske i regije.")),
+      h("div", {}, h("h1", {}, "BisStage"), h("p", { class: "lead" }, "Kupi i prodaj instrumente, nađi svirku, pitaj kolege, ocijeni opremu i saznaj gdje se svira. Za glazbenike iz Hrvatske i regije.")),
       h("nav", { class: "staff", "aria-label": "Dijelovi stranice" },
         door("oglasi", "Oglasnik", 5.5, 2.5, "low", "oglasi"), door("poslovi", "Burza poslova", 4.5, 1.5, "", "poslovi"),
-        door("forum", "Forum", 3.5, .5, "", "teme"), door("ocjene", "Ocjene opreme", 2, 2, "down", "oprema")))));
+        door("forum", "Forum", 3.5, .5, "", "teme"), door("ocjene", "Ocjene opreme", 2, 2, "down", "oprema"), door("dogadaji", "Događaji", 1, 1, "down", "dogadaji")))));
     bandFx(fx);
     const box = (title, href, cls = "rows") => { const list = h("div", { class: cls }, loading()); return [list, h("section", {}, h("h2", {}, title, h("a", { href: "/" + href }, "Sve")), list)]; };
     const [a, as] = box("Novi oglasi", "oglasi"), [j, js] = box("Novi poslovi", "poslovi"), [t, ts] = box("Na forumu", "forum"), [g, gs] = box("Najbolje ocijenjeno", "ocjene", "stack");
     const featList = h("div", { class: "feat-grid" });
     const featSec = h("section", { class: "feat-sec", hidden: true }, h("h2", {}, "Istaknuti oglasi", h("a", { href: "/oglasi" }, "Svi oglasi")), featList);
-    $("main").replaceChildren(featSec, h("div", { class: "home" }, as, js, ts, gs));
+    const evList = h("div", { class: "rows" });
+    const evSec = h("section", { class: "feat-sec", hidden: true }, h("h2", {}, "Uskoro", h("a", { href: "/dogadaji" }, "Svi događaji")), evList);
+    $("main").replaceChildren(featSec, evSec, h("div", { class: "home" }, as, js, ts, gs));
 
     const newest = (tbl, cols, n = 3) => q(sb.from(tbl).select(cols).order("created_at", { ascending: false }).limit(n));
     const count = tbl => sb.from(tbl).select("id", { count: "exact", head: true }).then(r => r.count ?? "–");
@@ -513,11 +600,16 @@ const views = {
       q(sb.from("oglasi").select(OGLAS_JAVNO).gt("istaknut_do", new Date().toISOString()).order("istaknut_od", { ascending: false }).limit(4)),
       q(sb.from("oprema_pregled").select("*").gt("broj_ocjena", 0).order("prosjek", { ascending: false }).limit(2)),
       count("oglasi"), count("poslovi"), count("teme"), count("oprema"),
+      upcoming().limit(4).then(r => r.data || []).catch(() => []),
     ]);
+    const ev = counts.pop();
     await loadNames([...og, ...po, ...te, ...ft].map(x => x.autor));
     if (!alive()) return;
     ["oglasi", "poslovi", "teme", "oprema"].forEach((k, i) => { const el = document.querySelector(`[data-c="${k}"]`); if (el) el.textContent = counts[i]; });
     featSec.hidden = !ft.length;
+    evSec.hidden = !ev.length;
+    evList.replaceChildren(...ev.map(eventRow));
+    const dc = document.querySelector('[data-c="dogadaji"]'); if (dc) dc.textContent = ev.length >= 4 ? "4+" : ev.length;
     featList.replaceChildren(...ft.map(o => h("a", { class: "feat-card", href: "/oglas/" + o.id },
       o.slike?.length ? h("img", { src: imgUrl(o.slike[0]), alt: "", loading: "lazy" }) : h("span", { class: "feat-ph", "aria-hidden": "true" }, "♪"),
       h("span", { class: "tag feat" }, "Istaknuto"), h("strong", {}, o.naslov), h("span", { class: "value" }, price(o)), h("span", { class: "meta" }, place(o)))));
@@ -525,6 +617,54 @@ const views = {
     fill(j, po.map(o => jobRow(o, "a", "/posao/" + o.id)), emptyBox("Još nema poslova", "Objavi prvi posao na Burzi poslova."));
     fill(t, te.map(threadRow), emptyBox("Još nema tema", "Otvori prvu temu na Forumu."));
     fill(g, op.map(gearCard), emptyBox("Još nema ocjena", "Dodaj opremu u Ocjenama opreme."));
+  },
+
+  async dogadaji(_, alive) {
+    const st = filters.dogadaji, list = h("div", { class: "stack" }, loading());
+    $("main").replaceChildren(
+      pageHead("Događaji", "Koncerti, festivali, tečajevi, jam sessioni i audicije u Hrvatskoj i regiji.", h("button", { class: "btn", type: "button", onclick: () => eventForm() }, "Dodaj događaj")),
+      h("div", { class: "tools" }, search("q-dogadaji", "Pretraži", st, "npr. jazz, Rijeka"), pick("v-dogadaji", "Vrsta", st, "vrsta", EVENT_TYPES), pick("d-dogadaji", "Država", st, "drzava", COUNTRIES)),
+      list);
+    const rows = await q(upcoming().limit(LIMIT));
+    if (!alive()) return;
+    redraw = () => {
+      const today = dayStart(new Date());
+      const shown = rows.filter(e => (!st.vrsta || e.vrsta === st.vrsta) && (!st.drzava || e.drzava === st.drzava) && hit(st.q, e.naziv, e.opis, e.grad, e.mjesto));
+      const groups = new Map();
+      shown.forEach(e => { const k = dayLabel(e, today); if (!groups.has(k)) groups.set(k, []); groups.get(k).push(e); });
+      fill(list, [...groups].map(([k, es]) => h("section", { class: "day-group" }, h("h2", {}, k), h("div", { class: "rows" }, es.map(eventRow)))),
+        rows.length ? emptyBox("Nema takvih događaja", "Promijeni pretragu ili filtre.") : emptyBox("Još nema najavljenih događaja", "Organiziraš koncert, tečaj ili jam session? Dodaj ga."));
+    };
+    redraw();
+  },
+
+  async dogadaj(id, alive) {
+    $("main").replaceChildren(h("a", { class: "back", href: "/dogadaji" }, "Natrag na događaje"), loading());
+    const [e] = await q(sb.from("dogadaji").select("*").eq("id", id).limit(1));
+    if (e) await loadNames([e.autor]);
+    if (!alive()) return;
+    if (!e) { $("main").replaceChildren(h("a", { class: "back", href: "/dogadaji" }, "Natrag na događaje"), emptyBox("Ovaj događaj više ne postoji", "Pogledaj ostale događaje.")); return; }
+    setTitle(e.naziv);
+    const endOf = e.kraj ? new Date(e.kraj) : new Date(dayStart(new Date(e.pocetak)).getTime() + 864e5);
+    const past = endOf < new Date();
+    $("main").replaceChildren(h("a", { class: "back", href: "/dogadaji" }, "Natrag na događaje"),
+      h("div", { class: "event-page" },
+        e.plakat ? h("button", { type: "button", class: "thumb-btn poster", "aria-label": "Povećaj plakat", onclick: () => openGallery([e.plakat], 0, e.naziv) }, h("img", { src: imgUrl(e.plakat), alt: "Plakat: " + e.naziv })) : null,
+        h("div", { class: "stack" },
+          h("div", { class: "head-row" }, h("div", {}, h("span", { class: "tag" }, e.vrsta), h("h1", {}, e.naziv))),
+          past ? h("p", { class: "err" }, "Ovaj je događaj završio.") : null,
+          h("dl", { class: "facts" },
+            h("dt", {}, "Kada"), h("dd", {}, whenText(e)),
+            h("dt", {}, "Gdje"), h("dd", {}, [e.mjesto, e.grad, e.drzava].filter(Boolean).join(", ")),
+            e.ulaz ? [h("dt", {}, "Ulaz"), h("dd", {}, e.ulaz)] : null,
+            h("dt", {}, "Organizator"), h("dd", {}, authorLink(e.autor))),
+          e.poveznica ? h("div", {}, h("a", { class: "btn", href: e.poveznica, target: "_blank", rel: "noopener nofollow ugc" }, "Ulaznice i više informacija")) : null,
+          h("p", { class: "prose" }, e.opis),
+          past ? null : h("div", { class: "actions" }, ...calLinks(e)),
+          h("div", { class: "actions" },
+            canEdit(e) ? h("button", { class: "btn small quiet", type: "button", onclick: () => eventForm(e) }, "Uredi") : null,
+            delBtn(e, async () => { await removeSlike(e.plakat ? [e.plakat] : []); await q(sb.from("dogadaji").delete().eq("id", e.id)); go("/dogadaji"); }),
+            reportBtn("dogadaj", e, "/dogadaj/" + e.id, e.naziv)))));
   },
 
   async oglasi(_, alive) {
@@ -775,11 +915,12 @@ const views = {
 
   async korisnik(id, alive) {
     $("main").replaceChildren(loading());
-    const [[p], og, po, te] = await Promise.all([
+    const [[p], og, po, te, ev] = await Promise.all([
       q(sb.from("profili").select("id,ime,slika,created_at").eq("id", id).limit(1)),
       q(sb.from("oglasi").select(OGLAS_JAVNO).eq("autor", id).order("created_at", { ascending: false }).limit(100)),
       q(sb.from("poslovi").select(POSAO_JAVNO).eq("autor", id).order("created_at", { ascending: false }).limit(100)),
       q(sb.from("teme_pregled").select("*").eq("autor", id).order("created_at", { ascending: false }).limit(100)),
+      q(upcoming().eq("autor", id).limit(50)),
     ]);
     if (!alive()) return;
     if (!p) { $("main").replaceChildren(emptyBox("Ovaj korisnik više ne postoji", "Možda je izbrisao račun.")); return; }
@@ -790,6 +931,7 @@ const views = {
       h("div", { class: "profile-head" }, avatar(p.id, "xl"), pageHead(p.ime, `Član od ${["siječnja","veljače","ožujka","travnja","svibnja","lipnja","srpnja","kolovoza","rujna","listopada","studenoga","prosinca"][new Date(p.created_at).getMonth()]} ${new Date(p.created_at).getFullYear()}. · ${plural(og.length, "oglas", "oglasa", "oglasa")} · ${plural(te.length, "tema", "teme", "tema")} na forumu`)),
       sec("Oglasi", featFirst(og).map(o => adRow(o, "a", "/oglas/" + o.id)), "Nema aktivnih oglasa."),
       po.length ? sec("Poslovi", po.map(o => jobRow(o, "a", "/posao/" + o.id)), "") : null,
+      ev.length ? sec("Nadolazeći događaji", ev.map(eventRow), "") : null,
       sec("Teme na forumu", te.map(threadRow), "Još nije otvorio nijednu temu.")].filter(Boolean));
   },
 
@@ -827,11 +969,12 @@ const views = {
         h("button", { class: "btn confirm", type: "button", onclick: deleteAccount }, "Izbriši moj račun")));
     $("main").replaceChildren(settings, h("section", { class: "stack my-posts" }, h("h2", {}, "Moje objave"), tabs, mine));
 
-    const [pref, og, po, te] = await Promise.all([
+    const [pref, og, po, te, ev] = await Promise.all([
       q(sb.from("postavke").select("obavijesti_forum").eq("id", uid()).limit(1)).catch(() => []),
       q(sb.from("oglasi").select(OGLAS_JAVNO + ",kontakt").eq("autor", uid()).order("created_at", { ascending: false })),
       q(sb.from("poslovi").select(POSAO_JAVNO + ",kontakt").eq("autor", uid()).order("created_at", { ascending: false })),
       q(sb.from("teme_pregled").select("*").eq("autor", uid()).order("created_at", { ascending: false })),
+      q(sb.from("dogadaji").select("*").eq("autor", uid()).order("pocetak", { ascending: false })),
     ]);
     if (!alive()) return;
     notif.checked = pref[0]?.obavijesti_forum ?? true; notif.disabled = false;
@@ -840,6 +983,7 @@ const views = {
       oglasi: [`Oglasi (${og.length})`, () => og.map(o => expander("o" + o.id, adRow(o), adBody(o))), ["Još nemaš oglasa", "Objavi prvi oglas u Oglasniku."]],
       poslovi: [`Poslovi (${po.length})`, () => po.map(o => expander("p" + o.id, jobRow(o), jobBody(o))), ["Još nemaš poslova", "Objavi posao na Burzi poslova."]],
       teme: [`Teme (${te.length})`, () => te.map(threadRow), ["Još nemaš tema", "Otvori temu na Forumu."]],
+      dogadaji: [`Događaji (${ev.length})`, () => ev.map(eventRow), ["Još nemaš događaja", "Dodaj koncert, tečaj ili jam session u Događajima."]],
     };
     redraw = () => {
       tabs.replaceChildren(...Object.entries(lists).map(([k, [l]]) => h("button", { class: "chip", type: "button", "aria-pressed": String(st.tab === k), onclick: () => { st.tab = k; redraw(); } }, l)));
@@ -896,11 +1040,12 @@ function deleteAccount() {
     fields: [{ name: "potvrda", label: "Za potvrdu upiši IZBRIŠI", required: true, max: 20, hint: "Brišu se profil, sve objave, ocjene i fotografije. To se ne može poništiti." }],
     save: async v => {
       if (v.potvrda.toUpperCase() !== "IZBRIŠI") throw new UserError("Upiši točno riječ IZBRIŠI.");
-      const [og, op] = await Promise.all([
+      const [og, op, ev] = await Promise.all([
         q(sb.from("oglasi").select("slike").eq("autor", uid())),
         q(sb.from("oprema").select("slika").eq("autor", uid())),
+        q(sb.from("dogadaji").select("plakat").eq("autor", uid())),
       ]);
-      const paths = [...og.flatMap(o => o.slike || []), ...op.map(o => o.slika).filter(Boolean), me?.slika].filter(Boolean);
+      const paths = [...og.flatMap(o => o.slike || []), ...op.map(o => o.slika), ...ev.map(e => e.plakat), me?.slika].filter(Boolean);
       for (let i = 0; i < paths.length; i += 100) await removeSlike(paths.slice(i, i + 100));
       await q(sb.rpc("obrisi_racun"));
       await sb.auth.signOut();
@@ -946,7 +1091,7 @@ function authPage(title, text, fields, submitLabel, run, links = [], google = tr
 /* ------------------------------------------------------------------ */
 /* Usmjeravanje i pokretanje                                           */
 /* ------------------------------------------------------------------ */
-const NAV_OF = { tema: "forum", oprema: "ocjene", oglas: "oglasi", posao: "poslovi", prijava: "account", registracija: "account", racun: "account", prijave: "account" };
+const NAV_OF = { dogadaj: "dogadaji", tema: "forum", oprema: "ocjene", oglas: "oglasi", posao: "poslovi", prijava: "account", registracija: "account", racun: "account", prijave: "account" };
 
 const TITLE = "BisStage – oglasnik instrumenata, poslovi za glazbenike i forum";
 function setTitle(t) { document.title = t ? `${t} – BisStage` : TITLE; }
@@ -960,7 +1105,7 @@ function go(path) {
 function legacyHash() {
   const h = location.hash.slice(1);
   if (!h) return null;
-  const m = h.match(/^(tema|oprema|oglas|posao)-([0-9a-f-]{36})$/);
+  const m = h.match(/^(tema|oprema|oglas|posao|dogadaj)-([0-9a-f-]{36})$/);
   if (m) return `/${m[1]}/${m[2]}`;
   if (h === "pocetna") return "/";
   return views[h] ? "/" + h : null;
@@ -970,7 +1115,7 @@ async function route(keepScroll) {
   const token = ++navToken;
   const alive = () => token === navToken;
   const raw = location.pathname.replace(/^\/+|\/+$/g, "") || "pocetna";
-  const m = raw.match(/^(tema|oprema|oglas|posao|korisnik)\/([0-9a-f-]{36})$/);
+  const m = raw.match(/^(tema|oprema|oglas|posao|korisnik|dogadaj)\/([0-9a-f-]{36})$/);
   const name = m ? m[1] : views[raw] ? raw : "pocetna";
   redraw = () => {};
   if (!keepScroll) open.clear(); // prelaskom na drugi dio stranice otvoreni oglasi se zatvaraju
