@@ -8,5 +8,5 @@ window.BISSTAGE = {
   googlePrijava: true,
   // Javni "site key" Cloudflare Turnstile widgeta (zaštita od botova). Prazno = isključeno.
   // Tajni ključ ide samo u Supabase (Authentication -> Attack Protection), nikad ovdje.
-  turnstileKljuc: "",
+  turnstileKljuc: "0x4AAAAAAGJVCRaepA5Y-cfH",
 };
