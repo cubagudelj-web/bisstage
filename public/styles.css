@@ -154,7 +154,20 @@ dialog.lightbox::backdrop { background: rgba(5, 6, 18, .88); }
 .gear-img { grid-column: 1 / -1; width: 100%; aspect-ratio: 4 / 3; object-fit: cover; border-radius: 6px; background: var(--accent-soft); margin-bottom: 8px; }
 .gear-hero { max-width: 520px; }
 .gear-hero img { width: 100%; aspect-ratio: 4 / 3; object-fit: cover; border-radius: 8px; display: block; }
-a.author { color: inherit; text-decoration: underline; text-decoration-color: var(--rule); text-underline-offset: 3px; }
+.avatar { display: inline-grid; place-items: center; flex: none; border-radius: 50%; object-fit: cover; background: var(--accent-soft); vertical-align: middle; }
+.avatar.initial { background: hsl(var(--hue) 55% 88%); color: hsl(var(--hue) 50% 28%); font: 700 .7em/1 var(--display); }
+.avatar.sm { width: 1.5em; height: 1.5em; font-size: .85em; margin-right: .35em; }
+.avatar.lg { width: 72px; height: 72px; font-size: 2rem; }
+.avatar.xl { width: 96px; height: 96px; font-size: 2.6rem; }
+.account .avatar.sm { width: 22px; height: 22px; font-size: .75rem; }
+.account { display: inline-flex; align-items: center; }
+.profile-head { display: flex; align-items: center; gap: 20px; }
+.profile-head .head-row { flex: 1; min-width: 0; }
+.avatar-edit { display: flex; gap: 16px; align-items: center; }
+.avatar-slot { flex: none; display: block; line-height: 0; }
+.stack-sm { display: grid; gap: 6px; min-width: 0; }
+@media (max-width: 420px) { .avatar.xl { width: 64px; height: 64px; font-size: 1.8rem; } .profile-head { gap: 12px; } }
+a.author { display: inline-flex; align-items: center; color: inherit; text-decoration: underline; text-decoration-color: var(--rule); text-underline-offset: 3px; }
 a.author:hover { color: var(--accent); text-decoration-color: currentColor; }
 .by { color: var(--muted); font-size: .9rem; }
 .my-posts { max-width: 1120px; margin-top: 12px; }

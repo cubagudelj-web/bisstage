@@ -27,6 +27,7 @@ let navToken = 0;
 const filters = { prijave: { tab: "otvorene" }, mojeObjave: { tab: "oglasi" }, oglasi: { q: "", cat: "", drzava: "" }, poslovi: { q: "", vrsta: "", drzava: "" }, forum: { q: "", kat: "" }, ocjene: { q: "", kat: "" } };
 const open = new Set();
 const nameCache = new Map();
+const avatarCache = new Map();
 
 /* ------------------------------------------------------------------ */
 /* Pomoćne funkcije                                                    */
@@ -106,12 +107,19 @@ function toast(text) {
 async function loadNames(ids) {
   const need = [...new Set(ids)].filter(i => i && !nameCache.has(i));
   for (let i = 0; i < need.length; i += 80) {
-    const rows = await q(sb.from("profili").select("id,ime").in("id", need.slice(i, i + 80)));
-    rows.forEach(r => nameCache.set(r.id, r.ime));
+    const rows = await q(sb.from("profili").select("id,ime,slika").in("id", need.slice(i, i + 80)));
+    rows.forEach(r => { nameCache.set(r.id, r.ime); avatarCache.set(r.id, r.slika || null); });
   }
 }
 const nameOf = id => nameCache.get(id) || "Član";
-const authorLink = id => h("a", { class: "author", href: "/korisnik/" + id }, nameOf(id));
+function avatar(id, size = "sm") {
+  const path = avatarCache.get(id);
+  if (path) return h("img", { class: "avatar " + size, src: imgUrl(path), alt: "", loading: "lazy" });
+  const name = nameOf(id);
+  let hash = 0; for (const ch of String(id)) hash = (hash * 31 + ch.charCodeAt(0)) >>> 0;
+  return h("span", { class: "avatar " + size + " initial", "aria-hidden": "true", vars: { "--hue": String(hash % 360) } }, (name.trim()[0] || "?").toUpperCase());
+}
+const authorLink = id => h("a", { class: "author", href: "/korisnik/" + id }, avatar(id), nameOf(id));
 
 function needLogin() {
   if (session) return false;
@@ -768,21 +776,21 @@ const views = {
   async korisnik(id, alive) {
     $("main").replaceChildren(loading());
     const [[p], og, po, te] = await Promise.all([
-      q(sb.from("profili").select("id,ime,created_at").eq("id", id).limit(1)),
+      q(sb.from("profili").select("id,ime,slika,created_at").eq("id", id).limit(1)),
       q(sb.from("oglasi").select(OGLAS_JAVNO).eq("autor", id).order("created_at", { ascending: false }).limit(100)),
       q(sb.from("poslovi").select(POSAO_JAVNO).eq("autor", id).order("created_at", { ascending: false }).limit(100)),
       q(sb.from("teme_pregled").select("*").eq("autor", id).order("created_at", { ascending: false }).limit(100)),
     ]);
     if (!alive()) return;
     if (!p) { $("main").replaceChildren(emptyBox("Ovaj korisnik više ne postoji", "Možda je izbrisao račun.")); return; }
-    nameCache.set(p.id, p.ime);
+    nameCache.set(p.id, p.ime); avatarCache.set(p.id, p.slika || null);
     setTitle(p.ime);
     const sec = (title, items, empty) => h("section", { class: "stack" }, h("h2", {}, title), items.length ? h("div", { class: "rows" }, items) : emptyBox(null, empty));
-    $("main").replaceChildren(
-      pageHead(p.ime, `Član od ${["siječnja","veljače","ožujka","travnja","svibnja","lipnja","srpnja","kolovoza","rujna","listopada","studenoga","prosinca"][new Date(p.created_at).getMonth()]} ${new Date(p.created_at).getFullYear()}. · ${plural(og.length, "oglas", "oglasa", "oglasa")} · ${plural(te.length, "tema", "teme", "tema")} na forumu`),
+    $("main").replaceChildren(...[
+      h("div", { class: "profile-head" }, avatar(p.id, "xl"), pageHead(p.ime, `Član od ${["siječnja","veljače","ožujka","travnja","svibnja","lipnja","srpnja","kolovoza","rujna","listopada","studenoga","prosinca"][new Date(p.created_at).getMonth()]} ${new Date(p.created_at).getFullYear()}. · ${plural(og.length, "oglas", "oglasa", "oglasa")} · ${plural(te.length, "tema", "teme", "tema")} na forumu`)),
       sec("Oglasi", featFirst(og).map(o => adRow(o, "a", "/oglas/" + o.id)), "Nema aktivnih oglasa."),
       po.length ? sec("Poslovi", po.map(o => jobRow(o, "a", "/posao/" + o.id)), "") : null,
-      sec("Teme na forumu", te.map(threadRow), "Još nije otvorio nijednu temu."));
+      sec("Teme na forumu", te.map(threadRow), "Još nije otvorio nijednu temu.")].filter(Boolean));
   },
 
   async racun(_, alive) {
@@ -807,6 +815,7 @@ const views = {
         catch (x) { err.textContent = errText(x); }
         save.disabled = false;
       } }, h("label", { class: "field", for: "r-ime" }, "Ime koje drugi vide", name), err, h("div", {}, save)),
+      avatarEditor(),
       h("label", { class: "check", for: "r-obavijesti" }, notif, h("span", {}, "Pošalji mi e-poruku kad netko odgovori na moju temu na forumu")),
       me?.admin ? h("p", {}, h("span", { class: "tag" }, "Administrator"), " Možeš brisati sve objave. ", h("a", { href: "/prijave" }, reportCount ? `Otvorene prijave: ${reportCount}` : "Pregled prijava")) : null,
       h("div", { class: "actions" },
@@ -842,6 +851,46 @@ const views = {
 
 };
 
+async function squareAvatar(file) {
+  let bmp;
+  try { bmp = await createImageBitmap(file); }
+  catch { throw new UserError("Tu sliku ne mogu otvoriti. Koristi JPG, PNG ili WebP."); }
+  const side = Math.min(bmp.width, bmp.height), out = 320;
+  const c = document.createElement("canvas"); c.width = c.height = out;
+  c.getContext("2d").drawImage(bmp, (bmp.width - side) / 2, (bmp.height - side) / 2, side, side, 0, 0, out, out);
+  return new Promise(r => c.toBlob(r, "image/jpeg", 0.85));
+}
+function avatarEditor() {
+  const input = h("input", { id: "r-slika", type: "file", accept: "image/jpeg,image/png,image/webp", hidden: true });
+  const pic = h("span", { class: "avatar-slot" }, avatar(uid(), "lg"));
+  const status = h("span", { class: "hint" });
+  const setPath = async path => {
+    const old = me.slika;
+    await q(sb.from("profili").update({ slika: path }).eq("id", uid()));
+    me.slika = path; avatarCache.set(uid(), path);
+    pic.replaceChildren(avatar(uid(), "lg")); renderAccount(); remove.hidden = !path;
+    if (old) await removeSlike([old]);
+  };
+  input.addEventListener("change", async () => {
+    const f = input.files[0]; if (!f) return;
+    status.textContent = "Spremam…";
+    try {
+      const blob = await squareAvatar(f);
+      const path = `${uid()}/profil/${crypto.randomUUID()}.jpg`;
+      await q(sb.storage.from("slike").upload(path, blob, { contentType: "image/jpeg", upsert: false }));
+      await setPath(path); toast("Profilna slika je spremljena");
+    } catch (e) { toast(errText(e)); }
+    status.textContent = ""; input.value = "";
+  });
+  const remove = h("button", { class: "btn small quiet", type: "button", hidden: !me?.slika, onclick: async () => {
+    try { await setPath(null); toast("Profilna slika je uklonjena"); } catch (e) { toast(errText(e)); }
+  } }, "Ukloni");
+  return h("div", { class: "avatar-edit" }, pic, h("div", { class: "stack-sm" },
+    h("strong", {}, "Profilna slika"),
+    h("div", { class: "actions" }, h("label", { class: "btn small", for: "r-slika" }, "Odaberi sliku"), remove, input),
+    status, h("span", { class: "hint" }, "Slika se izreže u kvadrat. Vidljiva je svima uz tvoje ime.")));
+}
+
 function deleteAccount() {
   openForm({ title: "Izbriši račun", submit: "Trajno izbriši račun", done: "Račun je izbrisan",
     fields: [{ name: "potvrda", label: "Za potvrdu upiši IZBRIŠI", required: true, max: 20, hint: "Brišu se profil, sve objave, ocjene i fotografije. To se ne može poništiti." }],
@@ -851,7 +900,7 @@ function deleteAccount() {
         q(sb.from("oglasi").select("slike").eq("autor", uid())),
         q(sb.from("oprema").select("slika").eq("autor", uid())),
       ]);
-      const paths = [...og.flatMap(o => o.slike || []), ...op.map(o => o.slika).filter(Boolean)];
+      const paths = [...og.flatMap(o => o.slike || []), ...op.map(o => o.slika).filter(Boolean), me?.slika].filter(Boolean);
       for (let i = 0; i < paths.length; i += 100) await removeSlike(paths.slice(i, i + 100));
       await q(sb.rpc("obrisi_racun"));
       await sb.auth.signOut();
@@ -942,9 +991,9 @@ function refresh() { route(true); }
 
 async function loadMe() {
   if (!session) { me = null; return; }
-  const rows = await q(sb.from("profili").select("id,ime,admin").eq("id", session.user.id).limit(1)).catch(() => []);
-  me = rows[0] || { id: session.user.id, ime: "Član", admin: false };
-  nameCache.set(me.id, me.ime);
+  const rows = await q(sb.from("profili").select("id,ime,admin,slika").eq("id", session.user.id).limit(1)).catch(() => []);
+  me = rows[0] || { id: session.user.id, ime: "Član", admin: false, slika: null };
+  nameCache.set(me.id, me.ime); avatarCache.set(me.id, me.slika || null);
 }
 let reportCount = 0;
 async function updateReportCount() {
@@ -955,7 +1004,7 @@ async function updateReportCount() {
 }
 function renderAccount() {
   const a = $("account");
-  if (session) { a.textContent = (me?.ime || "Moj račun") + (reportCount ? " · " + plural(reportCount, "prijava", "prijave", "prijava") : ""); a.href = reportCount ? "/prijave" : "/racun"; }
+  if (session) { a.replaceChildren(me ? avatar(me.id) : "", (me?.ime || "Moj račun") + (reportCount ? " · " + plural(reportCount, "prijava", "prijave", "prijava") : "")); a.href = reportCount ? "/prijave" : "/racun"; }
   else { a.textContent = "Prijava"; a.href = "/prijava"; }
 }
 
