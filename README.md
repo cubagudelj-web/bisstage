@@ -25,6 +25,15 @@ Tajni ključ (`sb_secret_` ili `service_role`) nikada ne ide u ovaj repozitorij.
 6. Zatim, jednom, `supabase/05-racun-obavijesti.sql` (brisanje računa, postavke, obavijesti o odgovorima).
 7. Zatim, jednom, `supabase/06-profilna-slika.sql` (profilna slika).
 8. Zatim, jednom, `supabase/07-dogadaji.sql` (rubrika Događaji).
+9. Zatim, jednom, `supabase/08-zastita-prodano.sql` (dnevna ograničenja objava, Prodano i istek oglasa).
+
+### Zaštita od botova (Cloudflare Turnstile)
+1. Cloudflare → **Turnstile** → **Add widget**, hostname `bisstage.com`, način **Managed**.
+2. Javni **Site key** upiši u `public/config.js` (`turnstileKljuc`) i objavi.
+3. Tek zatim: Supabase → **Authentication → Attack Protection** → uključi CAPTCHA, odaberi Turnstile i upiši **Secret key**.
+
+### Statistika posjeta
+Cloudflare → Workers & Pages → `bisstage` → **Metrics** → uključi **Web Analytics**.
 
 ### Obavijesti e-poštom
 U Resendu napravi API ključ (Sending access, domena bisstage.com). U Supabaseu: **Integrations → Vault → Add new secret**, naziv `resend_api_key`, vrijednost ključ. Bez toga se obavijesti jednostavno ne šalju.

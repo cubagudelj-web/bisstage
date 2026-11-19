@@ -193,6 +193,9 @@ a.author:hover { color: var(--accent); text-decoration-color: currentColor; }
 .facts dd { margin: 0; font-weight: 500; overflow-wrap: anywhere; }
 .facts dd::first-letter { text-transform: uppercase; }
 @media (max-width: 720px) { .event-page { grid-template-columns: minmax(0, 1fr); } .poster { max-width: 360px; } }
+.tag.sold { background: var(--rule); color: var(--muted); }
+.notice-box { background: var(--tag); color: var(--tag-fg); border-radius: 6px; padding: 8px 12px; font-weight: 600; }
+.captcha:empty { display: none; }
 .chips { display: flex; flex-wrap: wrap; gap: 6px; }
 .chip { font: 500 .9rem/1 var(--body); color: var(--fg); background: transparent; border: 1px solid var(--rule); border-radius: 6px; padding: 7px 10px; cursor: pointer; }
 .chip[aria-pressed="true"] { background: var(--accent); border-color: var(--accent); color: var(--accent-fg); }

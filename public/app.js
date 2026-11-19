@@ -16,7 +16,7 @@ const CRIT = [["zvuk", "Zvuk"], ["izrada", "Izrada"], ["vrijednost", "Vrijednost
 const MAX_SLIKA = 4;
 const LIMIT = 300;
 
-const OGLAS_JAVNO = "id,autor,naslov,kategorija,stanje,cijena,valuta,grad,drzava,opis,slike,video,istaknut_od,istaknut_do,created_at";
+const OGLAS_JAVNO = "id,autor,naslov,kategorija,stanje,cijena,valuta,grad,drzava,opis,slike,video,prodano,istjece,istaknut_od,istaknut_do,created_at";
 const POSAO_JAVNO = "id,autor,naslov,vrsta,honorar,grad,drzava,rok,opis,istaknut_od,istaknut_do,created_at";
 
 /* ------------------------------------------------------------------ */
@@ -86,6 +86,7 @@ function errText(e) {
     over_request_rate_limit: "Previše pokušaja. Pričekaj nekoliko minuta.",
     email_address_not_authorized: "Slanje e-pošte još nije postavljeno za ovu adresu. Javi se administratoru stranice.",
     validation_failed: "Provjeri jesu li sva polja ispravno popunjena.",
+    captcha_failed: "Sigurnosna provjera nije uspjela. Osvježi stranicu i pokušaj ponovo.",
     "23505": "To već postoji. Pronađi ga na popisu.",
     "23514": "Neko polje nije ispravno popunjeno. Provjeri duljinu teksta i odabrane vrijednosti.",
     "42501": "Nemaš dozvolu za ovu radnju. Prijavi se ponovo.",
@@ -333,10 +334,28 @@ function thumb(o) {
 const featured = o => !!o.istaknut_do && new Date(o.istaknut_do) > new Date();
 const featTag = o => featured(o) ? h("span", { class: "tag feat" }, "Istaknuto") : null;
 const featFirst = rows => [...rows].sort((a, b) => (featured(b) - featured(a)) || (featured(a) && featured(b) ? new Date(b.istaknut_od) - new Date(a.istaknut_od) : 0));
+// Oglas je aktivan dok nije prodan i dok nije istekao.
+const activeAds = query => query.eq("prodano", false).gt("istjece", new Date().toISOString());
+const adState = o => o.prodano ? "prodano" : (o.istjece && new Date(o.istjece) < new Date() ? "isteklo" : "aktivan");
 async function withFeatured(tbl, cols, rows) {
-  const feat = await q(sb.from(tbl).select(cols).gt("istaknut_do", new Date().toISOString()).order("istaknut_od", { ascending: false }).limit(50));
+  let fq = sb.from(tbl).select(cols).gt("istaknut_do", new Date().toISOString());
+  if (tbl === "oglasi") fq = activeAds(fq);
+  const feat = await q(fq.order("istaknut_od", { ascending: false }).limit(50));
   const ids = new Set(rows.map(r => r.id));
   return featFirst([...feat.filter(f => !ids.has(f.id)), ...rows]);
+}
+function soldBtns(o) {
+  if (!canEdit(o)) return [];
+  const st = adState(o);
+  const act = (label, fn, done) => h("button", { class: "btn small quiet", type: "button", onclick: async e => {
+    const b = e.currentTarget; b.disabled = true;
+    try { await fn(); toast(done); refresh(); } catch (x) { toast(errText(x)); b.disabled = false; }
+  } }, label);
+  const extend = act("Produlji za 60 dana", () => q(sb.rpc("produlji_oglas", { objekt: o.id })), "Oglas je produljen");
+  if (st === "prodano") return [act("Vrati u prodaju", () => q(sb.rpc("produlji_oglas", { objekt: o.id })), "Oglas je ponovo aktivan")];
+  if (st === "isteklo") return [extend];
+  const soon = new Date(o.istjece) - new Date() < 7 * 864e5;
+  return [act("Označi kao prodano", () => q(sb.from("oglasi").update({ prodano: true }).eq("id", o.id)), "Oglas je označen kao prodan"), soon ? extend : null];
 }
 function featureBtns(tbl, o) {
   const label = tbl === "oglasi" ? "oglas" : "posao";
@@ -358,7 +377,7 @@ function featureBtns(tbl, o) {
 }
 const adRow = (o, tag = "summary", href) => h(tag, { class: "row thumbed" + (featured(o) ? " featured" : ""), href }, thumb(o), h("h3", {}, o.naslov),
   h("div", { class: "value" }, price(o)),
-  h("div", { class: "meta" }, featTag(o), o.video ? h("span", { class: "tag" }, "▶ video") : null, h("span", {}, o.kategorija), h("span", {}, o.stanje), h("span", {}, place(o)), h("span", {}, nameOf(o.autor)), h("span", {}, date(o.created_at))));
+  h("div", { class: "meta" }, adState(o) === "prodano" ? h("span", { class: "tag sold" }, "Prodano") : adState(o) === "isteklo" ? h("span", { class: "tag sold" }, "Isteklo") : null, featTag(o), o.video ? h("span", { class: "tag" }, "▶ video") : null, h("span", {}, o.kategorija), h("span", {}, o.stanje), h("span", {}, place(o)), h("span", {}, nameOf(o.autor)), h("span", {}, date(o.created_at))));
 const jobRow = (o, tag = "summary", href) => h(tag, { class: "row" + (featured(o) ? " featured" : ""), href }, h("h3", {}, o.naslov),
   h("div", { class: "value" }, o.honorar || "Po dogovoru"),
   h("div", { class: "meta" }, featTag(o), h("span", {}, o.vrsta), h("span", {}, place(o)), o.rok ? h("span", {}, "Rok: " + day(o.rok)) : null, h("span", {}, nameOf(o.autor)), h("span", {}, date(o.created_at))));
@@ -376,9 +395,12 @@ function adBody(o) {
     o.slike?.length ? h("div", { class: "gallery" }, o.slike.map((p, i) => h("button", { type: "button", class: "thumb-btn", "aria-label": `Otvori fotografiju ${i + 1} od ${o.slike.length}`, onclick: () => openGallery(o.slike, i, o.naslov) },
       h("img", { src: imgUrl(p), alt: o.naslov, loading: "lazy" })))) : null,
     o.video ? videoBox(o.video, o.naslov) : null,
+    adState(o) !== "aktivan" ? h("p", { class: "notice-box" }, adState(o) === "prodano" ? "Ovaj je oglas označen kao prodan." : "Ovaj je oglas istekao i više se ne prikazuje na popisu.") : null,
     h("p", {}, o.opis), h("p", { class: "by" }, "Objavio: ", authorLink(o.autor)), contact(o),
+    canEdit(o) && o.istjece && adState(o) === "aktivan" ? h("p", { class: "hint" }, "Oglas ističe " + date(o.istjece) + ".") : null,
     h("div", { class: "actions" },
-      ...featureBtns("oglasi", o),
+      ...(adState(o) === "aktivan" ? featureBtns("oglasi", o) : []),
+      ...soldBtns(o),
       canEdit(o) ? h("button", { class: "btn small quiet", type: "button", onclick: () => oglasForm(o) }, "Uredi") : null,
       delBtn(o, async () => { await removeSlike(o.slike); await q(sb.from("oglasi").delete().eq("id", o.id)); }),
       reportBtn("oglas", o, "/oglas/" + o.id, o.naslov)),
@@ -593,11 +615,11 @@ const views = {
     const evSec = h("section", { class: "feat-sec", hidden: true }, h("h2", {}, "Uskoro", h("a", { href: "/dogadaji" }, "Svi događaji")), evList);
     $("main").replaceChildren(featSec, evSec, h("div", { class: "home" }, as, js, ts, gs));
 
-    const newest = (tbl, cols, n = 3) => q(sb.from(tbl).select(cols).order("created_at", { ascending: false }).limit(n));
-    const count = tbl => sb.from(tbl).select("id", { count: "exact", head: true }).then(r => r.count ?? "–");
+    const newest = (tbl, cols, n = 3) => q((tbl === "oglasi" ? activeAds(sb.from(tbl).select(cols)) : sb.from(tbl).select(cols)).order("created_at", { ascending: false }).limit(n));
+    const count = tbl => (tbl === "oglasi" ? activeAds(sb.from(tbl).select("id", { count: "exact", head: true })) : sb.from(tbl).select("id", { count: "exact", head: true })).then(r => r.count ?? "–");
     const [og, po, te, ft, op, ...counts] = await Promise.all([
       newest("oglasi", OGLAS_JAVNO), newest("poslovi", POSAO_JAVNO), newest("teme_pregled", "*"),
-      q(sb.from("oglasi").select(OGLAS_JAVNO).gt("istaknut_do", new Date().toISOString()).order("istaknut_od", { ascending: false }).limit(4)),
+      q(activeAds(sb.from("oglasi").select(OGLAS_JAVNO)).gt("istaknut_do", new Date().toISOString()).order("istaknut_od", { ascending: false }).limit(4)),
       q(sb.from("oprema_pregled").select("*").gt("broj_ocjena", 0).order("prosjek", { ascending: false }).limit(2)),
       count("oglasi"), count("poslovi"), count("teme"), count("oprema"),
       upcoming().limit(4).then(r => r.data || []).catch(() => []),
@@ -674,7 +696,7 @@ const views = {
       h("div", { class: "tools" }, search("q-oglasi", "Pretraži", st, "npr. tambura, Split"), pick("c-oglasi", "Kategorija", st, "cat", CATS), pick("d-oglasi", "Država", st, "drzava", COUNTRIES)),
       list);
     const cols = session ? OGLAS_JAVNO + ",kontakt" : OGLAS_JAVNO;
-    const rows = await withFeatured("oglasi", cols, await q(sb.from("oglasi").select(cols).order("created_at", { ascending: false }).limit(LIMIT)));
+    const rows = await withFeatured("oglasi", cols, await q(activeAds(sb.from("oglasi").select(cols)).order("created_at", { ascending: false }).limit(LIMIT)));
     await loadNames(rows.map(r => r.autor));
     if (!alive()) return;
     redraw = () => fill(list, rows.filter(o => (!st.cat || o.kategorija === st.cat) && (!st.drzava || o.drzava === st.drzava) && hit(st.q, o.naslov, o.opis, o.grad))
@@ -870,7 +892,7 @@ const views = {
       { name: "email", label: "E-mail", type: "email", auto: "email" },
       { name: "lozinka", label: "Lozinka", type: "password", auto: "current-password" }],
       "Prijavi se", async v => {
-        await q(sb.auth.signInWithPassword({ email: v.email, password: v.lozinka }));
+        await q(sb.auth.signInWithPassword({ email: v.email, password: v.lozinka, options: { captchaToken: v.captcha || undefined } }));
         let back = "/"; try { back = sessionStorage.getItem("povratak") || back; sessionStorage.removeItem("povratak"); } catch {}
         go(back); toast("Prijavljen si");
       },
@@ -884,7 +906,7 @@ const views = {
       { name: "email", label: "E-mail", type: "email", auto: "email" },
       { name: "lozinka", label: "Lozinka", type: "password", auto: "new-password", min: 8, hint: "Najmanje 8 znakova." }],
       "Registriraj se", async (v, ok) => {
-        const data = await q(sb.auth.signUp({ email: v.email, password: v.lozinka, options: { data: { ime: v.ime }, emailRedirectTo: location.origin + "/" } }));
+        const data = await q(sb.auth.signUp({ email: v.email, password: v.lozinka, options: { data: { ime: v.ime }, emailRedirectTo: location.origin + "/", captchaToken: v.captcha || undefined } }));
         if (data.session) { go("/"); toast("Dobro došao na BisStage"); }
         else ok("Poslali smo ti e-poruku. Klikni poveznicu u njoj da potvrdiš račun, a zatim se prijavi. Ako poruku ne vidiš za nekoliko minuta, provjeri neželjenu poštu (Spam).");
       },
@@ -898,7 +920,7 @@ const views = {
     authPage("Nova lozinka", "Upiši e-mail i poslat ćemo ti poveznicu za novu lozinku. Otvori je u istom pregledniku.", [
       { name: "email", label: "E-mail", type: "email", auto: "email" }],
       "Pošalji poveznicu", async (v, ok) => {
-        await q(sb.auth.resetPasswordForEmail(v.email, { redirectTo: location.origin + "/?reset=1" }));
+        await q(sb.auth.resetPasswordForEmail(v.email, { redirectTo: location.origin + "/?reset=1", captchaToken: v.captcha || undefined }));
         ok("Ako postoji račun s tom adresom, poslali smo ti poveznicu. Ako je ne vidiš, provjeri neželjenu poštu (Spam).");
       }, [h("a", { href: "/prijava" }, "Natrag na prijavu")], false);
   },
@@ -917,7 +939,7 @@ const views = {
     $("main").replaceChildren(loading());
     const [[p], og, po, te, ev] = await Promise.all([
       q(sb.from("profili").select("id,ime,slika,created_at").eq("id", id).limit(1)),
-      q(sb.from("oglasi").select(OGLAS_JAVNO).eq("autor", id).order("created_at", { ascending: false }).limit(100)),
+      q(activeAds(sb.from("oglasi").select(OGLAS_JAVNO)).eq("autor", id).order("created_at", { ascending: false }).limit(100)),
       q(sb.from("poslovi").select(POSAO_JAVNO).eq("autor", id).order("created_at", { ascending: false }).limit(100)),
       q(sb.from("teme_pregled").select("*").eq("autor", id).order("created_at", { ascending: false }).limit(100)),
       q(upcoming().eq("autor", id).limit(50)),
@@ -1064,8 +1086,25 @@ function legalPage(d) {
     d.odjeljci.flatMap(([title, ...rest]) => [h("h2", {}, title), ...rest.map(block)])));
 }
 
+let tsLoad = null;
+function loadTurnstile() {
+  return tsLoad ||= new Promise((res, rej) => {
+    const sc = document.createElement("script");
+    sc.src = "https://challenges.cloudflare.com/turnstile/v0/api.js?render=explicit";
+    sc.async = true; sc.onload = () => res(window.turnstile); sc.onerror = () => { tsLoad = null; rej(new Error("Failed to fetch")); };
+    document.head.append(sc);
+  });
+}
+
 function authPage(title, text, fields, submitLabel, run, links = [], google = true, extra = null) {
   const err = h("p", { class: "err", role: "alert" });
+  // Nevidljiva provjera protiv botova (Cloudflare Turnstile), kad je ključ upisan u config.js.
+  const cap = CFG.turnstileKljuc && run && fields.some(f => f.name === "email") ? { box: h("div", { class: "captcha" }), token: null, id: null } : null;
+  if (cap) loadTurnstile().then(ts => {
+    if (!cap.box.isConnected) return;
+    cap.id = ts.render(cap.box, { sitekey: CFG.turnstileKljuc, size: "flexible", appearance: "interaction-only", language: "hr",
+      callback: t => { cap.token = t; }, "expired-callback": () => { cap.token = null; }, "error-callback": () => { cap.token = null; } });
+  }).catch(() => { err.textContent = "Sigurnosna provjera se nije učitala. Osvježi stranicu."; });
   const ok = h("p", { class: "ok", role: "status" });
   const send = submitLabel ? h("button", { class: "btn", type: "submit" }, submitLabel) : null;
   const inputs = fields.map(f => h("label", { class: "field", for: "a-" + f.name }, f.label,
@@ -1073,11 +1112,16 @@ function authPage(title, text, fields, submitLabel, run, links = [], google = tr
     f.hint ? h("span", { class: "hint" }, f.hint) : null));
   const form = run ? h("form", { onsubmit: async e => {
     e.preventDefault(); send.disabled = true; err.textContent = ""; ok.textContent = "";
-    const v = Object.fromEntries([...new FormData(form).entries()].map(([k, x]) => [k, k === "lozinka" ? x : String(x).trim()]));
+    const v = Object.fromEntries([...new FormData(form).entries()].filter(([k]) => !k.startsWith("cf-")).map(([k, x]) => [k, k === "lozinka" ? x : String(x).trim()]));
+    if (cap) {
+      v.captcha = cap.token || (cap.id != null && window.turnstile?.getResponse(cap.id)) || null;
+      if (!v.captcha) { err.textContent = "Sigurnosna provjera još traje. Pričekaj trenutak i pokušaj ponovo."; send.disabled = false; return; }
+    }
     try { await run(v, m => { ok.textContent = m; form.reset(); }); }
     catch (x) { console.error(x); err.textContent = errText(x); }
+    if (cap && cap.id != null) { try { window.turnstile.reset(cap.id); } catch {} cap.token = null; }
     send.disabled = false;
-  } }, inputs, extra, err, ok, h("div", {}, send)) : null;
+  } }, inputs, extra, cap?.box, err, ok, h("div", {}, send)) : null;
   const g = google && CFG.googlePrijava ? [h("button", { class: "btn google", type: "button", onclick: async () => {
     const { error } = await sb.auth.signInWithOAuth({ provider: "google", options: { redirectTo: location.origin + "/" } });
     if (error) err.textContent = errText(error);
