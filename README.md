@@ -28,6 +28,7 @@ Tajni ključ (`sb_secret_` ili `service_role`) nikada ne ide u ovaj repozitorij.
 9. Zatim, jednom, `supabase/08-zastita-prodano.sql` (dnevna ograničenja objava, Prodano i istek oglasa).
 10. Zatim, jednom, `supabase/09-studijska-oprema.sql` (kategorija Kućni studio postaje Studijska oprema).
 11. Zatim, jednom, `supabase/10-forum-studio.sql` (kategorija foruma Kućni studio postaje Studio i snimanje).
+12. Zatim, jednom, `supabase/11-spremljeno-podsjetnici.sql` (spremljeni oglasi i pretrage, obavijest o novom oglasu, podsjetnik prije isteka; dnevni posao u pg_cron).
 
 ### Zaštita od botova (Cloudflare Turnstile)
 1. Cloudflare → **Turnstile** → **Add widget**, hostname `bisstage.com`, način **Managed**.

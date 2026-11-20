@@ -196,6 +196,12 @@ a.author:hover { color: var(--accent); text-decoration-color: currentColor; }
 .tag.sold { background: var(--rule); color: var(--muted); }
 .notice-box { background: var(--tag); color: var(--tag-fg); border-radius: 6px; padding: 8px 12px; font-weight: 600; }
 .captcha:empty { display: none; }
+.btn.heart { background: transparent; color: var(--bad); border-color: var(--rule); }
+.btn.heart.on { border-color: var(--bad); }
+.saved-mark { color: var(--bad); }
+.save-search { margin-top: -8px; }
+.save-search .btn { white-space: normal; text-align: left; }
+.foot-links button { background: none; border: 0; padding: 0; font: inherit; color: var(--accent); text-decoration: underline; cursor: pointer; }
 .chips { display: flex; flex-wrap: wrap; gap: 6px; }
 .chip { font: 500 .9rem/1 var(--body); color: var(--fg); background: transparent; border: 1px solid var(--rule); border-radius: 6px; padding: 7px 10px; cursor: pointer; }
 .chip[aria-pressed="true"] { background: var(--accent); border-color: var(--accent); color: var(--accent-fg); }

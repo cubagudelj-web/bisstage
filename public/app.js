@@ -344,6 +344,21 @@ async function withFeatured(tbl, cols, rows) {
   const ids = new Set(rows.map(r => r.id));
   return featFirst([...feat.filter(f => !ids.has(f.id)), ...rows]);
 }
+function heartBtn(o) {
+  if (me && o.autor === me.id) return null;
+  const on = savedAds.has(o.id);
+  return h("button", { class: "btn small heart" + (on ? " on" : ""), type: "button", "aria-pressed": String(on), onclick: async e => {
+    if (needLogin()) return;
+    const b = e.currentTarget; b.disabled = true;
+    try {
+      if (savedAds.has(o.id)) { await q(sb.from("spremljeni").delete().eq("oglas", o.id)); savedAds.delete(o.id); toast("Uklonjeno iz spremljenih"); }
+      else { await q(sb.from("spremljeni").insert({ oglas: o.id })); savedAds.add(o.id); toast("Spremljeno. Pronaći ćeš ga u Moj račun."); }
+      const now = savedAds.has(o.id);
+      b.className = "btn small heart" + (now ? " on" : ""); b.setAttribute("aria-pressed", String(now)); b.textContent = now ? "♥ Spremljeno" : "♡ Spremi";
+    } catch (x) { toast(errText(x)); }
+    b.disabled = false;
+  } }, on ? "♥ Spremljeno" : "♡ Spremi");
+}
 function soldBtns(o) {
   if (!canEdit(o)) return [];
   const st = adState(o);
@@ -377,7 +392,7 @@ function featureBtns(tbl, o) {
 }
 const adRow = (o, tag = "summary", href) => h(tag, { class: "row thumbed" + (featured(o) ? " featured" : ""), href }, thumb(o), h("h3", {}, o.naslov),
   h("div", { class: "value" }, price(o)),
-  h("div", { class: "meta" }, adState(o) === "prodano" ? h("span", { class: "tag sold" }, "Prodano") : adState(o) === "isteklo" ? h("span", { class: "tag sold" }, "Isteklo") : null, featTag(o), o.video ? h("span", { class: "tag" }, "▶ video") : null, h("span", {}, o.kategorija), h("span", {}, o.stanje), h("span", {}, place(o)), h("span", {}, nameOf(o.autor)), h("span", {}, date(o.created_at))));
+  h("div", { class: "meta" }, savedAds.has(o.id) ? h("span", { class: "saved-mark", title: "Spremljeno" }, "♥") : null, adState(o) === "prodano" ? h("span", { class: "tag sold" }, "Prodano") : adState(o) === "isteklo" ? h("span", { class: "tag sold" }, "Isteklo") : null, featTag(o), o.video ? h("span", { class: "tag" }, "▶ video") : null, h("span", {}, o.kategorija), h("span", {}, o.stanje), h("span", {}, place(o)), h("span", {}, nameOf(o.autor)), h("span", {}, date(o.created_at))));
 const jobRow = (o, tag = "summary", href) => h(tag, { class: "row" + (featured(o) ? " featured" : ""), href }, h("h3", {}, o.naslov),
   h("div", { class: "value" }, o.honorar || "Po dogovoru"),
   h("div", { class: "meta" }, featTag(o), h("span", {}, o.vrsta), h("span", {}, place(o)), o.rok ? h("span", {}, "Rok: " + day(o.rok)) : null, h("span", {}, nameOf(o.autor)), h("span", {}, date(o.created_at))));
@@ -400,6 +415,7 @@ function adBody(o) {
     canEdit(o) && o.istjece && adState(o) === "aktivan" ? h("p", { class: "hint" }, "Oglas ističe " + date(o.istjece) + ".") : null,
     h("div", { class: "actions" },
       ...(adState(o) === "aktivan" ? featureBtns("oglasi", o) : []),
+      heartBtn(o),
       ...soldBtns(o),
       canEdit(o) ? h("button", { class: "btn small quiet", type: "button", onclick: () => oglasForm(o) }, "Uredi") : null,
       delBtn(o, async () => { await removeSlike(o.slike); await q(sb.from("oglasi").delete().eq("id", o.id)); }),
@@ -699,8 +715,20 @@ const views = {
     const rows = await withFeatured("oglasi", cols, await q(activeAds(sb.from("oglasi").select(cols)).order("created_at", { ascending: false }).limit(LIMIT)));
     await loadNames(rows.map(r => r.autor));
     if (!alive()) return;
-    redraw = () => fill(list, rows.filter(o => (!st.cat || o.kategorija === st.cat) && (!st.drzava || o.drzava === st.drzava) && hit(st.q, o.naslov, o.opis, o.grad))
+    const saveSearch = h("button", { class: "btn small quiet", type: "button", onclick: async e => {
+      if (needLogin()) return;
+      const b = e.currentTarget; b.disabled = true;
+      try {
+        await q(sb.from("pretrage").insert({ q: st.q.trim().slice(0, 80), kategorija: st.cat || null, drzava: st.drzava || null }));
+        toast("Pretraga je spremljena. Javit ćemo ti e-poštom kad se pojavi novi oglas.");
+      } catch (x) { toast(errText(x)); }
+      b.disabled = false;
+    } }, "🔔 Javi mi kad se pojavi novi oglas za ovu pretragu");
+    const saveRow = h("div", { class: "save-search" }, saveSearch);
+    list.before(saveRow);
+    const drawList = () => fill(list, rows.filter(o => (!st.cat || o.kategorija === st.cat) && (!st.drzava || o.drzava === st.drzava) && hit(st.q, o.naslov, o.opis, o.grad))
       .map(o => expander("o" + o.id, adRow(o), adBody(o))), rows.length ? emptyBox("Nema takvih oglasa", "Promijeni pretragu ili filtre.") : emptyBox("Još nema oglasa", "Objavi prvi oglas."));
+    redraw = () => { saveRow.hidden = !(st.q.trim() || st.cat || st.drzava); drawList(); };
     redraw();
   },
 
@@ -969,6 +997,13 @@ const views = {
       catch (x) { notif.checked = !notif.checked; toast(errText(x)); }
       notif.disabled = false;
     });
+    const notifS = h("input", { id: "r-pretrage", type: "checkbox", checked: true, disabled: true });
+    notifS.addEventListener("change", async () => {
+      notifS.disabled = true;
+      try { await q(sb.from("postavke").upsert({ id: uid(), obavijesti_pretrage: notifS.checked })); toast(notifS.checked ? "Obavijesti su uključene" : "Obavijesti su isključene"); }
+      catch (x) { notifS.checked = !notifS.checked; toast(errText(x)); }
+      notifS.disabled = false;
+    });
     const mine = h("div", { class: "rows" }, loading()), tabs = h("div", { class: "chips" });
     const settings = h("div", { class: "auth" },
       h("h1", {}, "Moj račun"),
@@ -981,31 +1016,43 @@ const views = {
       } }, h("label", { class: "field", for: "r-ime" }, "Ime koje drugi vide", name), err, h("div", {}, save)),
       avatarEditor(),
       h("label", { class: "check", for: "r-obavijesti" }, notif, h("span", {}, "Pošalji mi e-poruku kad netko odgovori na moju temu na forumu")),
+      h("label", { class: "check", for: "r-pretrage" }, notifS, h("span", {}, "Pošalji mi e-poruku kad se pojavi novi oglas za moje spremljene pretrage")),
       me?.admin ? h("p", {}, h("span", { class: "tag" }, "Administrator"), " Možeš brisati sve objave. ", h("a", { href: "/prijave" }, reportCount ? `Otvorene prijave: ${reportCount}` : "Pregled prijava")) : null,
       h("div", { class: "actions" },
         h("a", { class: "btn quiet", href: "/korisnik/" + uid() }, "Moj javni profil"),
         h("a", { class: "btn quiet", href: "/zaboravljena-lozinka" }, "Promijeni lozinku"),
         h("button", { class: "btn danger", type: "button", onclick: async () => { await sb.auth.signOut(); go("/"); toast("Odjavljen si"); } }, "Odjavi se")),
       h("details", { class: "danger-zone" }, h("summary", {}, "Izbriši račun"),
-        h("p", {}, "Brisanjem računa trajno se brišu tvoj profil, svi oglasi, poslovi, teme, odgovori, ocjene i fotografije. To se ne može poništiti."),
+        h("p", {}, "Brisanjem računa trajno se brišu tvoj profil, svi oglasi, poslovi, teme, odgovori, ocjene, fotografije, spremljeni oglasi i pretrage. To se ne može poništiti."),
         h("button", { class: "btn confirm", type: "button", onclick: deleteAccount }, "Izbriši moj račun")));
     $("main").replaceChildren(settings, h("section", { class: "stack my-posts" }, h("h2", {}, "Moje objave"), tabs, mine));
 
-    const [pref, og, po, te, ev] = await Promise.all([
-      q(sb.from("postavke").select("obavijesti_forum").eq("id", uid()).limit(1)).catch(() => []),
+    const [pref, og, po, te, ev, sp, pr] = await Promise.all([
+      q(sb.from("postavke").select("obavijesti_forum,obavijesti_pretrage").eq("id", uid()).limit(1)).catch(() => []),
       q(sb.from("oglasi").select(OGLAS_JAVNO + ",kontakt").eq("autor", uid()).order("created_at", { ascending: false })),
       q(sb.from("poslovi").select(POSAO_JAVNO + ",kontakt").eq("autor", uid()).order("created_at", { ascending: false })),
       q(sb.from("teme_pregled").select("*").eq("autor", uid()).order("created_at", { ascending: false })),
       q(sb.from("dogadaji").select("*").eq("autor", uid()).order("pocetak", { ascending: false })),
+      q(sb.from("spremljeni").select("oglas").order("created_at", { ascending: false })).then(async r => r.length ? q(sb.from("oglasi").select(OGLAS_JAVNO + ",kontakt").in("id", r.map(x => x.oglas))) : []),
+      q(sb.from("pretrage").select("*").order("created_at", { ascending: false })),
     ]);
+    await loadNames(sp.map(o => o.autor));
     if (!alive()) return;
     notif.checked = pref[0]?.obavijesti_forum ?? true; notif.disabled = false;
+    notifS.checked = pref[0]?.obavijesti_pretrage ?? true; notifS.disabled = false;
+    const searchRow = p => h("div", { class: "row" }, h("h3", {}, [p.q && `„${p.q}”`, p.kategorija, p.drzava].filter(Boolean).join(" · ")),
+      h("div", { class: "value" }, h("button", { class: "btn small danger", type: "button", onclick: async () => {
+        try { await q(sb.from("pretrage").delete().eq("id", p.id)); pr.splice(pr.indexOf(p), 1); toast("Pretraga je izbrisana"); redraw(); } catch (x) { toast(errText(x)); }
+      } }, "Izbriši")),
+      h("div", { class: "meta" }, h("span", {}, "Spremljeno " + date(p.created_at)), p.zadnja_obavijest ? h("span", {}, "Zadnja obavijest " + date(p.zadnja_obavijest)) : null));
     const st = filters.mojeObjave;
     const lists = {
       oglasi: [`Oglasi (${og.length})`, () => og.map(o => expander("o" + o.id, adRow(o), adBody(o))), ["Još nemaš oglasa", "Objavi prvi oglas u Oglasniku."]],
       poslovi: [`Poslovi (${po.length})`, () => po.map(o => expander("p" + o.id, jobRow(o), jobBody(o))), ["Još nemaš poslova", "Objavi posao na Burzi poslova."]],
       teme: [`Teme (${te.length})`, () => te.map(threadRow), ["Još nemaš tema", "Otvori temu na Forumu."]],
       dogadaji: [`Događaji (${ev.length})`, () => ev.map(eventRow), ["Još nemaš događaja", "Dodaj koncert, tečaj ili jam session u Događajima."]],
+      spremljeno: [`Spremljeno (${sp.length})`, () => sp.map(o => expander("s" + o.id, adRow(o), adBody(o))), ["Još nemaš spremljenih oglasa", "U oglasu klikni ♡ Spremi."]],
+      pretrage: [`Pretrage (${pr.length})`, () => pr.map(searchRow), ["Još nemaš spremljenih pretraga", "U Oglasniku upiši što tražiš i klikni 🔔 Javi mi kad se pojavi novi oglas."]],
     };
     redraw = () => {
       tabs.replaceChildren(...Object.entries(lists).map(([k, [l]]) => h("button", { class: "chip", type: "button", "aria-pressed": String(st.tab === k), onclick: () => { st.tab = k; redraw(); } }, l)));
@@ -1178,8 +1225,16 @@ async function route(keepScroll) {
 }
 function refresh() { route(true); }
 
+const savedAds = new Set();
+async function loadSaved() {
+  savedAds.clear();
+  if (!session) return;
+  const rows = await q(sb.from("spremljeni").select("oglas")).catch(() => []);
+  rows.forEach(r => savedAds.add(r.oglas));
+}
 async function loadMe() {
-  if (!session) { me = null; return; }
+  if (!session) { me = null; savedAds.clear(); return; }
+  await loadSaved();
   const rows = await q(sb.from("profili").select("id,ime,admin,slika").eq("id", session.user.id).limit(1)).catch(() => []);
   me = rows[0] || { id: session.user.id, ime: "Član", admin: false, slika: null };
   nameCache.set(me.id, me.ime); avatarCache.set(me.id, me.slika || null);
@@ -1226,6 +1281,19 @@ async function boot() {
     }, 0);
   });
   addEventListener("popstate", () => route());
+  let installEvt = null;
+  addEventListener("beforeinstallprompt", e => {
+    e.preventDefault(); installEvt = e;
+    const b = $("install"); if (b) b.hidden = false;
+  });
+  $("install")?.addEventListener("click", async () => {
+    if (!installEvt) return;
+    installEvt.prompt();
+    const { outcome } = await installEvt.userChoice.catch(() => ({}));
+    if (outcome === "accepted") { $("install").hidden = true; toast("BisStage je dodan na početni zaslon"); }
+    installEvt = null;
+  });
+  addEventListener("appinstalled", () => { const b = $("install"); if (b) b.hidden = true; });
   addEventListener("hashchange", () => { const l = legacyHash(); if (l) { history.replaceState(null, "", l); route(); } });
   document.addEventListener("click", e => {
     const a = e.target.closest("a[href]");
