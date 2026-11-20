@@ -1,13 +1,14 @@
 -- BisStage: spremljeni oglasi, spremljene pretrage s obavijestima e-poštom,
 -- podsjetnik prije isteka oglasa.
--- Pokreni jednom u Supabaseu: SQL Editor -> New query -> zalijepi -> Run.
+-- Pokreni u Supabaseu: SQL Editor -> New query -> zalijepi -> Run.
+-- Skripta se smije pokrenuti i više puta: radi samo ono što još nedostaje.
 -- E-pošta se šalje istim ključem iz Vaulta ("resend_api_key") kao obavijesti o odgovorima.
 
 create extension if not exists pg_net with schema extensions;
 create extension if not exists pg_cron with schema pg_catalog;
 
 -- Zajednička funkcija za slanje e-pošte (nedostupna sa stranice).
-create function public.posalji_email(p_to text, p_subject text, p_html text) returns void
+create or replace function public.posalji_email(p_to text, p_subject text, p_html text) returns void
 language plpgsql security definer set search_path = '' as $$
 declare v_key text;
 begin
@@ -21,22 +22,23 @@ begin
 end $$;
 revoke all on function public.posalji_email(text, text, text) from public, anon, authenticated;
 
-create function public.norm(t text) returns text language sql immutable as $$
+create or replace function public.norm(t text) returns text language sql immutable as $$
   select translate(lower(coalesce(t, '')), 'čćžšđČĆŽŠĐ', 'cczsdcczsd')
 $$;
 
 -- Postavka: obavijesti o novim oglasima za spremljene pretrage.
-alter table public.postavke add column obavijesti_pretrage boolean not null default true;
+alter table public.postavke add column if not exists obavijesti_pretrage boolean not null default true;
 grant insert (obavijesti_pretrage), update (obavijesti_pretrage) on public.postavke to authenticated;
 
 -- 1. Spremljeni oglasi (vidi samo vlasnik).
-create table public.spremljeni (
+create table if not exists public.spremljeni (
   autor uuid not null default auth.uid() references public.profili (id) on delete cascade,
   oglas uuid not null references public.oglasi (id) on delete cascade,
   created_at timestamptz not null default now(),
   primary key (autor, oglas)
 );
 alter table public.spremljeni enable row level security;
+drop policy if exists "spremljeni: samo svoje" on public.spremljeni;
 create policy "spremljeni: samo svoje" on public.spremljeni for all to authenticated
   using (autor = (select auth.uid())) with check (autor = (select auth.uid()));
 revoke all on public.spremljeni from anon, authenticated;
@@ -44,7 +46,7 @@ grant select, delete on public.spremljeni to authenticated;
 grant insert (oglas) on public.spremljeni to authenticated;
 
 -- 2. Spremljene pretrage (najviše 10 po korisniku).
-create table public.pretrage (
+create table if not exists public.pretrage (
   id uuid primary key default gen_random_uuid(),
   autor uuid not null default auth.uid() references public.profili (id) on delete cascade,
   q text not null default '' check (char_length(q) <= 80),
@@ -54,15 +56,16 @@ create table public.pretrage (
   created_at timestamptz not null default now(),
   check (q <> '' or kategorija is not null or drzava is not null)
 );
-create index on public.pretrage (autor);
+create index if not exists pretrage_autor_idx on public.pretrage (autor);
 alter table public.pretrage enable row level security;
+drop policy if exists "pretrage: samo svoje" on public.pretrage;
 create policy "pretrage: samo svoje" on public.pretrage for all to authenticated
   using (autor = (select auth.uid())) with check (autor = (select auth.uid()));
 revoke all on public.pretrage from anon, authenticated;
 grant select, delete on public.pretrage to authenticated;
 grant insert (q, kategorija, drzava) on public.pretrage to authenticated;
 
-create function public.najvise_pretraga() returns trigger
+create or replace function public.najvise_pretraga() returns trigger
 language plpgsql security definer set search_path = '' as $$
 begin
   if (select count(*) from public.pretrage where autor = new.autor) >= 10 then
@@ -70,11 +73,12 @@ begin
   end if;
   return new;
 end $$;
+drop trigger if exists najvise_pretraga on public.pretrage;
 create trigger najvise_pretraga before insert on public.pretrage for each row execute function public.najvise_pretraga();
 
 -- Obavijest kad se pojavi oglas koji odgovara nečijoj spremljenoj pretrazi
 -- (najviše jedna e-poruka na sat po pretrazi, najviše 50 primatelja po oglasu).
-create function public.obavijest_novi_oglas() returns trigger
+create or replace function public.obavijest_novi_oglas() returns trigger
 language plpgsql security definer set search_path = '' as $$
 declare
   r record;
@@ -109,10 +113,11 @@ exception when others then
   return new; -- obavijest nikad ne smije spriječiti objavu oglasa
 end $$;
 revoke all on function public.obavijest_novi_oglas() from public, anon, authenticated;
+drop trigger if exists obavijest_novi_oglas on public.oglasi;
 create trigger obavijest_novi_oglas after insert on public.oglasi for each row execute function public.obavijest_novi_oglas();
 
 -- 3. Podsjetnik tri dana prije isteka oglasa (svaki dan u 9 sati po našem vremenu).
-alter table public.oglasi add column podsjetnik timestamptz;
+alter table public.oglasi add column if not exists podsjetnik timestamptz;
 
 create or replace function public.produlji_oglas(objekt uuid) returns timestamptz
 language plpgsql security definer set search_path = '' as $$
@@ -127,7 +132,7 @@ begin
   return v_do;
 end $$;
 
-create function public.podsjetnik_isteka() returns int
+create or replace function public.podsjetnik_isteka() returns int
 language plpgsql security definer set search_path = '' as $$
 declare r record; n int := 0;
 begin
