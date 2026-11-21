@@ -13,7 +13,7 @@ const TOPICS = ["Instrumenti", "Bendovi i svirke", "Studio i snimanje", "Učenje
 const EVENT_TYPES = ["Koncert", "Festival", "Tečaj ili radionica", "Jam session", "Audicija ili natjecanje", "Sajam opreme", "Ostalo"];
 const MJ = ["sij", "velj", "ožu", "tra", "svi", "lip", "srp", "kol", "ruj", "lis", "stu", "pro"];
 const CRIT = [["zvuk", "Zvuk"], ["izrada", "Izrada"], ["vrijednost", "Vrijednost"]];
-const MAX_SLIKA = 4;
+const MAX_SLIKA = 7;
 const LIMIT = 300;
 
 const OGLAS_JAVNO = "id,autor,naslov,kategorija,stanje,cijena,valuta,grad,drzava,opis,slike,video,prodano,istjece,istaknut_od,istaknut_do,created_at";
@@ -202,7 +202,7 @@ async function shrink(file) {
 }
 
 async function uploadSlike(oglasId, files) {
-  if (files.length > MAX_SLIKA) throw new UserError(`Možeš dodati najviše ${MAX_SLIKA} fotografije.`);
+  if (files.length > MAX_SLIKA) throw new UserError(`Možeš dodati najviše ${MAX_SLIKA} fotografija.`);
   const paths = [];
   for (const f of files) {
     const blob = await shrink(f);

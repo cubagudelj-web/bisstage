@@ -32,6 +32,7 @@ Tajni ključ (`sb_secret_` ili `service_role`) nikada ne ide u ovaj repozitorij.
 13. Zatim `supabase/12-gitarske-pedale.sql` (kategorija Gitarske pedale i pojačala u ocjenama opreme).
 14. Zatim `supabase/13-pedale-oglasnik.sql` (ista kategorija u oglasniku i spremljenim pretragama).
 15. Zatim `supabase/14-kalendari.sql` (automatski uvoz događaja iz javnih kalendara; kalendare dodaješ na stranici `/kalendari`).
+16. Zatim `supabase/15-sedam-slika.sql` (do 7 fotografija u oglasu).
 
 ### Zaštita od botova (Cloudflare Turnstile)
 1. Cloudflare → **Turnstile** → **Add widget**, hostname `bisstage.com`, način **Managed**.
