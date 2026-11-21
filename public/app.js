@@ -98,7 +98,8 @@ function errText(e) {
   if (/already registered/i.test(msg)) return map.user_already_exists;
   if (/not authorized/i.test(msg)) return map.email_address_not_authorized;
   if (/Failed to fetch|NetworkError|Load failed/i.test(msg)) return "Nema veze s poslužiteljem. Provjeri internet i pokušaj ponovo.";
-  return "Nešto nije uspjelo. Pokušaj ponovo.";
+  if (code === "PGRST204" && me?.admin) return "Baza još nema novi stupac. Pokreni zadnju SQL skriptu u Supabaseu. (" + msg + ")";
+  return "Nešto nije uspjelo. Pokušaj ponovo." + (me?.admin && (code || msg) ? ` (${[code, msg].filter(Boolean).join(": ")})` : "");
 }
 
 function toast(text) {
