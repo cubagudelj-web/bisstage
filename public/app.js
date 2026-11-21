@@ -593,6 +593,7 @@ function eventForm(existing) {
       { name: "naziv", label: "Naziv događaja", required: true, max: 120, min_len: 3 },
       { name: "vrsta", label: "Vrsta", options: EVENT_TYPES, placeholder: "Odaberi", required: true },
       [{ name: "pocetak", label: "Početak", type: "datetime-local", required: true }, { name: "kraj", label: "Završetak (nije obavezno)", type: "datetime-local" }],
+      { name: "izvor", label: "Organizator (nije obavezno)", max: 120, hint: "Ako nisi ti organizator, upiši tko jest, npr. Koncertna dvorana Vatroslava Lisinskog. Inače ostavi prazno." },
       { name: "mjesto", label: "Mjesto održavanja", required: true, max: 120, hint: "npr. Dom kulture, klub Boogaloo, Trg bana Jelačića" },
       [{ name: "grad", label: "Grad", required: true, max: 60 }, { name: "drzava", label: "Država", options: COUNTRIES, required: true }],
       { name: "ulaz", label: "Ulaz (nije obavezno)", max: 60, hint: "npr. Besplatno, 10 €, pretprodaja 8 €" },
@@ -609,7 +610,7 @@ function eventForm(existing) {
       if (link && !/^https?:\/\/[^\s<>"]+$/.test(link)) throw new UserError("Poveznica nije ispravna.");
       const id = existing?.id || crypto.randomUUID();
       const row = { naziv: v.naziv, vrsta: v.vrsta, pocetak: start.toISOString(), kraj: end ? end.toISOString() : null, mjesto: v.mjesto, grad: v.grad, drzava: v.drzava,
-        ulaz: v.ulaz || null, poveznica: link, opis: v.opis };
+        ulaz: v.ulaz || null, poveznica: link, opis: v.opis, izvor: (v.izvor || "").trim() || null };
       let old = null;
       if (files[0]) {
         const blob = await shrink(files[0]);
@@ -722,7 +723,8 @@ const views = {
             h("dt", {}, "Kada"), h("dd", {}, whenText(e)),
             h("dt", {}, "Gdje"), h("dd", {}, [e.mjesto, e.grad, e.drzava].filter(Boolean).join(", ")),
             e.ulaz ? [h("dt", {}, "Ulaz"), h("dd", {}, e.ulaz)] : null,
-            h("dt", {}, "Organizator"), h("dd", {}, e.izvor ? e.izvor : authorLink(e.autor))),
+            h("dt", {}, "Organizator"), h("dd", {}, e.izvor ? e.izvor : authorLink(e.autor)),
+            e.izvor && !e.kalendar ? [h("dt", {}, "Objavio"), h("dd", {}, authorLink(e.autor))] : null),
           e.kalendar ? h("p", { class: "hint" }, "Događaj je preuzet iz organizatorova javnog kalendara. Provjeri pojedinosti kod organizatora.") : null,
           e.poveznica ? h("div", {}, h("a", { class: "btn", href: e.poveznica, target: "_blank", rel: "noopener nofollow ugc" }, "Ulaznice i više informacija")) : null,
           h("p", { class: "prose" }, e.opis),

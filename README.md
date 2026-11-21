@@ -35,6 +35,7 @@ Tajni ključ (`sb_secret_` ili `service_role`) nikada ne ide u ovaj repozitorij.
 16. Zatim `supabase/15-sedam-slika.sql` (do 7 fotografija u oglasu).
 17. Zatim `supabase/16-kalendar-grad.sql` (uvoz iz kalendara prepoznaje grad i državu iz adrese).
 18. Zatim `supabase/17-kalendar-ulaznice.sql` (poveznica za ulaznice iz opisa događaja u kalendaru).
+19. Zatim `supabase/18-organizator.sql` (polje Organizator kod događaja).
 
 ### Zaštita od botova (Cloudflare Turnstile)
 1. Cloudflare → **Turnstile** → **Add widget**, hostname `bisstage.com`, način **Managed**.
