@@ -1,6 +1,62 @@
 -- BisStage: uvoz iz kalendara uzima prvu poveznicu iz opisa događaja (npr. na ulaznice)
 -- kad kalendar nema posebno polje za poveznicu (Google kalendar ga nema).
+-- Sadrži i prepoznavanje grada iz adrese (kao 16-kalendar-grad.sql), pa radi i bez nje.
 -- Pokreni u Supabaseu: SQL Editor -> New query -> zalijepi -> Run. Smije se pokrenuti i više puta.
+
+create or replace function public.ics_mjesto(p_lok text, out grad text, out drzava text, out strana boolean)
+language plpgsql immutable set search_path = '' as $$
+declare
+  v_dijelovi text[]; v_d text; i int; v_n int; v_idx int; v_kand text;
+begin
+  strana := false;
+  if coalesce(trim(p_lok), '') = '' then return; end if;
+  -- zagrade, npr. "(Local Name: Hrvatska)", i višak razmaka
+  p_lok := regexp_replace(p_lok, '\([^)]*\)', '', 'g');
+  v_dijelovi := array(select trim(regexp_replace(t, '\s+', ' ', 'g')) from unnest(string_to_array(p_lok, ',')) t where trim(t) <> '');
+  v_n := cardinality(v_dijelovi);
+  if v_n = 0 then return; end if;
+
+  for i in reverse v_n..1 loop
+    v_d := lower(v_dijelovi[i]);
+    drzava := case
+      when v_d in ('hrvatska', 'croatia', 'republika hrvatska', 'hr') then 'Hrvatska'
+      when v_d in ('slovenija', 'slovenia', 'si') then 'Slovenija'
+      when v_d in ('bosna i hercegovina', 'bosnia and herzegovina', 'bosnia & herzegovina', 'bih', 'ba') then 'Bosna i Hercegovina'
+      when v_d in ('srbija', 'serbia', 'србија', 'rs') then 'Srbija'
+      when v_d in ('crna gora', 'montenegro', 'црна гора', 'me') then 'Crna Gora'
+      when v_d in ('sjeverna makedonija', 'north macedonia', 'makedonija', 'macedonia', 'северна македонија', 'mk') then 'Sjeverna Makedonija'
+      when v_d in ('austria', 'austrija', 'österreich', 'germany', 'njemačka', 'deutschland', 'italy', 'italija', 'italia',
+                   'hungary', 'mađarska', 'magyarország', 'switzerland', 'švicarska', 'france', 'francuska', 'united kingdom', 'uk',
+                   'usa', 'united states', 'sad', 'netherlands', 'nizozemska', 'czech republic', 'czechia', 'češka', 'slovakia',
+                   'slovačka', 'poland', 'poljska', 'spain', 'španjolska', 'sweden', 'švedska', 'ireland', 'irska', 'bulgaria',
+                   'bugarska', 'romania', 'rumunjska', 'greece', 'grčka', 'albania', 'albanija', 'kosovo', 'belgium', 'belgija')
+        then '-'
+      else null end;
+    if drzava is not null then v_idx := i; exit; end if;
+  end loop;
+
+  if drzava = '-' then drzava := null; strana := true; return; end if;
+
+  -- grad je dio ispred države; bez države zadnji dio, ali samo ako ima poštanski broj (npr. "10000 Zagreb")
+  if v_idx is not null then
+    if v_idx > 1 then v_kand := v_dijelovi[v_idx - 1]; end if;
+  elsif v_n > 1 and v_dijelovi[v_n] ~ '\d{4,5}' then
+    v_kand := v_dijelovi[v_n];
+  end if;
+  if v_kand is null then return; end if;
+  -- poštanski broj ispred ili iza ("10000 Zagreb", "HR-21000 Split", "Zagreb 10000")
+  v_kand := trim(regexp_replace(v_kand, '^([A-Za-z]{2}-)?\d{4,5}\s*|\s*\d{4,5}$', '', 'g'));
+  -- samo poštanski broj: uzmi dio ispred njega
+  if v_kand = '' and v_idx is not null and v_idx > 2 then
+    v_kand := trim(regexp_replace(v_dijelovi[v_idx - 2], '^([A-Za-z]{2}-)?\d{4,5}\s*|\s*\d{4,5}$', '', 'g'));
+  end if;
+  -- ulica s kućnim brojem ili naziv dvorane nisu grad
+  if v_kand ~ '\d' or v_kand !~ '[[:alpha:]]' or char_length(v_kand) > 40 then return; end if;
+  -- prvi dio adrese obično je naziv mjesta održavanja; grad je samo ako ne zvuči kao dvorana ili klub
+  if v_kand = v_dijelovi[1] and (v_n > 2 or v_kand ~* '(klub|club|dom|dvoran|hall|crkv|church|kazali|teat|arena|bar|pub|caff|cafe|kafi|centar|center|galerij|trg|ulica|park|hotel|škol|skol|muzej|museum|festival|k\.d\.|lisinsk|pozori|kino|stage|studio)'
+                                 or array_length(regexp_split_to_array(v_kand, '\s+'), 1) > 3) then return; end if;
+  grad := v_kand;
+end $$;
 
 create or replace function public.kalendar_spremi(p_id uuid) returns jsonb
 language plpgsql security definer set search_path = '' as $$
@@ -86,3 +142,35 @@ begin
   return jsonb_build_object('stanje', 'greska', 'greska', c.greska);
 end $$;
 revoke all on function public.kalendar_spremi(uuid) from public, anon, authenticated;
+
+-- Točan razlog greške vidi se uz kalendar na stranici /kalendari.
+create or replace function public.kalendari_obradi_sve() returns int
+language plpgsql security definer set search_path = '' as $$
+declare r record; n int := 0;
+begin
+  for r in select id from public.kalendari where zahtjev is not null loop
+    begin
+      perform public.kalendar_spremi(r.id); n := n + 1;
+    exception when others then
+      update public.kalendari set zahtjev = null, greska = left('Greška pri obradi kalendara: ' || sqlerrm, 300) where id = r.id;
+    end;
+  end loop;
+  return n;
+end $$;
+revoke all on function public.kalendari_obradi_sve() from public, anon, authenticated;
+
+create or replace function public.kalendar_stanje(p_id uuid) returns jsonb
+language plpgsql security definer set search_path = '' as $$
+declare v_g text;
+begin
+  if not public.je_admin() then raise exception 'Samo administrator.' using errcode = '42501'; end if;
+  begin
+    return public.kalendar_spremi(p_id);
+  exception when others then
+    v_g := left('Greška pri obradi kalendara: ' || sqlerrm, 300);
+    update public.kalendari set zahtjev = null, greska = v_g where id = p_id;
+    return jsonb_build_object('stanje', 'greska', 'greska', v_g);
+  end;
+end $$;
+revoke all on function public.kalendar_stanje(uuid) from public, anon;
+grant execute on function public.kalendar_stanje(uuid) to authenticated;
