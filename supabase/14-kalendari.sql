@@ -105,9 +105,9 @@ declare
 begin
   create temp table if not exists ics_tmp (kljuc text primary key, naziv text, pocetak timestamptz, kraj timestamptz,
     cijeli_dan boolean, lokacija text, opis text, poveznica text, otkazan boolean) on commit drop;
-  delete from ics_tmp;
+  delete from ics_tmp where true; -- "where true": Supabase ne dopušta DELETE bez WHERE
   create temp table if not exists ics_ev (rb serial, d jsonb) on commit drop;
-  delete from ics_ev;
+  delete from ics_ev where true;
 
   p_ics := replace(replace(left(coalesce(p_ics, ''), 3000000), chr(13) || chr(10), chr(10)), chr(13), chr(10));
   p_ics := regexp_replace(p_ics, '\n[ \t]', '', 'g');
