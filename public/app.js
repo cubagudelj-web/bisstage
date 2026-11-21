@@ -569,7 +569,7 @@ function calForm(existing) {
       { name: "url", label: "Javna adresa kalendara (iCal, .ics)", type: "url", required: true, max: 500,
         hint: "Google kalendar: Postavke kalendara → Integriraj kalendar → Javna adresa u iCal formatu. Kalendar mora biti javan." },
       { name: "vrsta", label: "Vrsta događaja", options: EVENT_TYPES, required: true, hint: "Festivali, jam sessioni i radionice prepoznaju se i po nazivu." },
-      { name: "mjesto", label: "Mjesto održavanja", required: true, max: 120, hint: "Koristi se kad događaj u kalendaru nema upisano mjesto." },
+      { name: "mjesto", label: "Mjesto održavanja", required: true, max: 120, hint: "Mjesto, grad i država koriste se kad ih adresa događaja u kalendaru ne otkriva." },
       [{ name: "grad", label: "Grad", required: true, max: 60 }, { name: "drzava", label: "Država", options: COUNTRIES, required: true }],
       { name: "poveznica", label: "Web stranica organizatora (nije obavezno)", type: "url", max: 300 }],
     save: async v => {
