@@ -37,6 +37,7 @@ Tajni ključ (`sb_secret_` ili `service_role`) nikada ne ide u ovaj repozitorij.
 18. Zatim `supabase/17-kalendar-ulaznice.sql` (poveznica za ulaznice iz opisa događaja u kalendaru).
 19. Zatim `supabase/18-organizator.sql` (polje Organizator kod događaja).
 20. Zatim `supabase/19-auto-plakat.sql` (automatski plakat za događaje bez fotografije).
+21. Zatim `supabase/20-statistika.sql` (stranica Statistika za administratora).
 
 ### Zaštita od botova (Cloudflare Turnstile)
 1. Cloudflare → **Turnstile** → **Add widget**, hostname `bisstage.com`, način **Managed**.

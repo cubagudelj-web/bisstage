@@ -1001,6 +1001,56 @@ const views = {
     redraw();
   },
 
+  async statistika(_, alive) {
+    if (!me?.admin) { go("/"); return; }
+    const body = h("div", { class: "stack" }, loading());
+    $("main").replaceChildren(pageHead("Statistika", "Korisnici i objave na BisStageu. Ovu stranicu vidiš samo ti kao administrator."), body);
+    let d;
+    try { d = await q(sb.rpc("admin_statistika")); } catch (e) { body.replaceChildren(h("p", { class: "err" }, errText(e))); return; }
+    if (!alive()) return;
+    const k = d.korisnici, c = d.sadrzaj;
+    const tile = (n, label, sub) => h("div", { class: "stat" }, h("b", {}, String(n ?? 0)), h("span", {}, label), sub ? h("small", {}, sub) : null);
+    const when = t => t ? new Date(t).toLocaleString("hr-HR", { day: "numeric", month: "numeric", year: "numeric", hour: "2-digit", minute: "2-digit" }) : "—";
+    const max = Math.max(1, ...d.po_danima.map(x => x.broj));
+    const dayLbl = s => { const [y, m, dd] = s.split("-"); return `${+dd}. ${+m}.`; };
+    const rows = [
+      ["Oglasi", c.oglasi, `aktivnih: ${c.oglasi.aktivni}`, "/oglasi"],
+      ["Poslovi", c.poslovi, "", "/poslovi"],
+      ["Teme na forumu", c.teme, "", "/forum"],
+      ["Odgovori na forumu", c.odgovori, "", null],
+      ["Oprema u ocjenama", c.oprema, "", "/ocjene"],
+      ["Ocjene opreme", c.recenzije, "", null],
+      ["Događaji", c.dogadaji, `nadolazećih: ${c.dogadaji.nadolazeci}`, "/dogadaji"],
+    ];
+    body.replaceChildren(
+      h("h2", {}, "Korisnici"),
+      h("div", { class: "stat-grid" },
+        tile(k.ukupno, "registriranih ukupno", k.google ? `od toga ${k.google} preko Googlea` : null),
+        tile(k.danas, "novih danas"),
+        tile(k.tjedan, "novih u 7 dana"),
+        tile(k.mjesec, "novih u 30 dana"),
+        tile(k.aktivni_tjedan, "prijavljenih u 7 dana"),
+        tile(k.nepotvrdeni, "nisu potvrdili e-mail", k.nepotvrdeni ? "poruka im je možda u neželjenoj pošti" : null)),
+      h("h2", {}, "Nove registracije po danima (30 dana)"),
+      h("div", { class: "bars", role: "img", "aria-label": "Broj novih registracija po danima" },
+        ...d.po_danima.map(x => h("div", { class: "bar", title: `${dayLbl(x.dan)}: ${x.broj}` },
+          x.broj ? h("em", {}, String(x.broj)) : null, h("i", { style: `height:${Math.round(x.broj / max * 85)}%` })))),
+      h("div", { class: "bars-axis" }, h("span", {}, dayLbl(d.po_danima[0].dan)), h("span", {}, "danas")),
+      h("h2", {}, "Objave"),
+      h("div", { class: "table-wrap" }, h("table", { class: "stats" },
+        h("thead", {}, h("tr", {}, h("th", {}, "Rubrika"), h("th", { class: "num" }, "Ukupno"), h("th", { class: "num" }, "Novih u 7 dana"), h("th", {}, ""))),
+        h("tbody", {}, ...rows.map(([n, v, extra, href]) => h("tr", {},
+          h("td", {}, href ? h("a", { href }, n) : n), h("td", { class: "num" }, String(v.ukupno)), h("td", { class: "num" }, String(v.tjedan)), h("td", { class: "muted" }, extra))),
+          h("tr", {}, h("td", {}, h("a", { href: "/prijave" }, "Prijave neprimjerenih objava")), h("td", { class: "num" }, String(c.prijave.ukupno)), h("td", { class: "num" }, ""), h("td", { class: c.prijave.otvorene ? "err" : "muted" }, `otvorenih: ${c.prijave.otvorene}`))))),
+      h("h2", {}, "Zadnje registracije"),
+      h("div", { class: "table-wrap" }, h("table", { class: "stats" },
+        h("thead", {}, h("tr", {}, h("th", {}, "Korisnik"), h("th", {}, "E-mail"), h("th", {}, "Način"), h("th", {}, "Registriran"), h("th", {}, "Zadnja prijava"), h("th", {}, "Potvrđen"))),
+        h("tbody", {}, ...d.novi.map(u => h("tr", {},
+          h("td", {}, u.ime ? h("a", { href: "/korisnik/" + u.id }, u.ime) : "—"), h("td", {}, u.email || "—"),
+          h("td", {}, u.nacin === "google" ? "Google" : "E-mail"), h("td", {}, when(u.created_at)), h("td", {}, when(u.last_sign_in_at)),
+          h("td", { class: u.potvrden ? "" : "muted" }, u.potvrden ? "da" : "čeka potvrdu")))))),
+      h("p", { class: "hint" }, "Broj posjeta (i onih koji se nisu registrirali) vidiš u Cloudflareu: Workers & Pages → bisstage → Metrics → Web Analytics."));
+  },
   async kalendari(_, alive) {
     if (!me?.admin) { go("/"); return; }
     const list = h("div", { class: "stack" }, loading());
@@ -1155,7 +1205,7 @@ const views = {
       avatarEditor(),
       h("label", { class: "check", for: "r-obavijesti" }, notif, h("span", {}, "Pošalji mi e-poruku kad netko odgovori na moju temu na forumu")),
       h("label", { class: "check", for: "r-pretrage" }, notifS, h("span", {}, "Pošalji mi e-poruku kad se pojavi novi oglas za moje spremljene pretrage")),
-      me?.admin ? h("p", {}, h("span", { class: "tag" }, "Administrator"), " Možeš brisati sve objave. ", h("a", { href: "/prijave" }, reportCount ? `Otvorene prijave: ${reportCount}` : "Pregled prijava"), " · ", h("a", { href: "/kalendari" }, "Kalendari događaja")) : null,
+      me?.admin ? h("p", {}, h("span", { class: "tag" }, "Administrator"), " Možeš brisati sve objave. ", h("a", { href: "/prijave" }, reportCount ? `Otvorene prijave: ${reportCount}` : "Pregled prijava"), " · ", h("a", { href: "/kalendari" }, "Kalendari događaja"), " · ", h("a", { href: "/statistika" }, "Statistika")) : null,
       h("div", { class: "actions" },
         h("a", { class: "btn quiet", href: "/korisnik/" + uid() }, "Moj javni profil"),
         h("a", { class: "btn quiet", href: "/zaboravljena-lozinka" }, "Promijeni lozinku"),
@@ -1320,7 +1370,7 @@ function authPage(title, text, fields, submitLabel, run, links = [], google = tr
 /* ------------------------------------------------------------------ */
 /* Usmjeravanje i pokretanje                                           */
 /* ------------------------------------------------------------------ */
-const NAV_OF = { dogadaj: "dogadaji", tema: "forum", oprema: "ocjene", oglas: "oglasi", posao: "poslovi", prijava: "account", registracija: "account", racun: "account", prijave: "account", kalendari: "dogadaji" };
+const NAV_OF = { dogadaj: "dogadaji", tema: "forum", oprema: "ocjene", oglas: "oglasi", posao: "poslovi", prijava: "account", registracija: "account", racun: "account", prijave: "account", kalendari: "dogadaji", statistika: "account" };
 
 const TITLE = "BisStage – oglasnik instrumenata, poslovi za glazbenike i forum";
 function setTitle(t) { document.title = t ? `${t} – BisStage` : TITLE; }
