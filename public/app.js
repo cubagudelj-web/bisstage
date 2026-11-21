@@ -525,6 +525,7 @@ const dayStart = d => new Date(d.getFullYear(), d.getMonth(), d.getDate());
 function whenText(e) {
   const a = new Date(e.pocetak), b = e.kraj ? new Date(e.kraj) : null;
   const dl = d => d.toLocaleDateString("hr-HR", { weekday: "long", day: "numeric", month: "numeric", year: "numeric" });
+  if (e.cijeli_dan) return !b || sameDay(a, b) ? dl(a) : `${a.toLocaleDateString("hr-HR")} – ${b.toLocaleDateString("hr-HR")}`;
   if (!b) return `${dl(a)} u ${hm(a)}`;
   if (sameDay(a, b)) return `${dl(a)}, ${hm(a)} – ${hm(b)}`;
   return `${a.toLocaleDateString("hr-HR")} ${hm(a)} – ${b.toLocaleDateString("hr-HR")} ${hm(b)}`;
@@ -541,7 +542,7 @@ function dayLabel(e, today) {
 const dateTile = e => { const a = new Date(e.pocetak); return h("span", { class: "date-tile", "aria-hidden": "true" }, h("b", {}, a.getDate()), h("small", {}, MJ[a.getMonth()])); };
 const eventRow = e => h("a", { class: "row event", href: "/dogadaj/" + e.id }, dateTile(e), h("h3", {}, e.naziv),
   h("div", { class: "value" }, e.ulaz || ""),
-  h("div", { class: "meta" }, h("span", { class: "tag" }, e.vrsta), h("span", {}, hm(new Date(e.pocetak))), h("span", {}, e.mjesto), h("span", {}, place(e))));
+  h("div", { class: "meta" }, h("span", { class: "tag" }, e.vrsta), e.cijeli_dan ? null : h("span", {}, hm(new Date(e.pocetak))), h("span", {}, e.mjesto), h("span", {}, place(e))));
 const upcoming = () => {
   const today = dayStart(new Date()).toISOString(), now = new Date().toISOString();
   return sb.from("dogadaji").select("*").or(`pocetak.gte.${today},kraj.gte.${now}`).order("pocetak");
@@ -558,6 +559,30 @@ function calLinks(e) {
   const icsHref = URL.createObjectURL(new Blob([ics], { type: "text/calendar" }));
   return [h("a", { class: "btn small quiet", href: g, target: "_blank", rel: "noopener" }, "Dodaj u Google kalendar"),
     h("a", { class: "btn small quiet", href: icsHref, download: "bisstage-dogadaj.ics" }, "Preuzmi za kalendar (.ics)")];
+}
+function calForm(existing) {
+  openForm({
+    title: existing ? "Uredi kalendar" : "Dodaj kalendar", submit: existing ? "Spremi" : "Dodaj kalendar", done: existing ? "Spremljeno" : "Kalendar je dodan. Klikni Uvezi sada.",
+    values: existing || { drzava: "Hrvatska", vrsta: "Koncert" },
+    fields: [
+      { name: "naziv", label: "Organizator", required: true, max: 120, min_len: 2, hint: "Prikazuje se uz svaki događaj, npr. Klub Boogaloo" },
+      { name: "url", label: "Javna adresa kalendara (iCal, .ics)", type: "url", required: true, max: 500,
+        hint: "Google kalendar: Postavke kalendara → Integriraj kalendar → Javna adresa u iCal formatu. Kalendar mora biti javan." },
+      { name: "vrsta", label: "Vrsta događaja", options: EVENT_TYPES, required: true, hint: "Festivali, jam sessioni i radionice prepoznaju se i po nazivu." },
+      { name: "mjesto", label: "Mjesto održavanja", required: true, max: 120, hint: "Koristi se kad događaj u kalendaru nema upisano mjesto." },
+      [{ name: "grad", label: "Grad", required: true, max: 60 }, { name: "drzava", label: "Država", options: COUNTRIES, required: true }],
+      { name: "poveznica", label: "Web stranica organizatora (nije obavezno)", type: "url", max: 300 }],
+    save: async v => {
+      let url = String(v.url || "").trim().replace(/^webcal:\/\//i, "https://");
+      if (!/^https:\/\/[^\s<>"]+$/.test(url)) throw new UserError("Adresa kalendara mora počinjati s https://");
+      let link = v.poveznica || null;
+      if (link && !/^https?:\/\//i.test(link)) link = "https://" + link;
+      if (link && !/^https?:\/\/[^\s<>"]+$/.test(link)) throw new UserError("Poveznica nije ispravna.");
+      const row = { naziv: v.naziv, url, vrsta: v.vrsta, mjesto: v.mjesto, grad: v.grad, drzava: v.drzava, poveznica: link };
+      if (existing) await q(sb.from("kalendari").update(row).eq("id", existing.id));
+      else await q(sb.from("kalendari").insert(row));
+    },
+  });
 }
 function eventForm(existing) {
   if (needLogin()) return;
@@ -660,7 +685,9 @@ const views = {
   async dogadaji(_, alive) {
     const st = filters.dogadaji, list = h("div", { class: "stack" }, loading());
     $("main").replaceChildren(
-      pageHead("Događaji", "Koncerti, festivali, tečajevi, jam sessioni i audicije u Hrvatskoj i regiji.", h("button", { class: "btn", type: "button", onclick: () => eventForm() }, "Dodaj događaj")),
+      pageHead("Događaji", "Koncerti, festivali, tečajevi, jam sessioni i audicije u Hrvatskoj i regiji.", h("div", { class: "actions" },
+        me?.admin ? h("a", { class: "btn quiet", href: "/kalendari" }, "Kalendari") : null,
+        h("button", { class: "btn", type: "button", onclick: () => eventForm() }, "Dodaj događaj"))),
       h("div", { class: "tools" }, search("q-dogadaji", "Pretraži", st, "npr. jazz, Rijeka"), pick("v-dogadaji", "Vrsta", st, "vrsta", EVENT_TYPES), pick("d-dogadaji", "Država", st, "drzava", COUNTRIES)),
       list);
     const rows = await q(upcoming().limit(LIMIT));
@@ -695,7 +722,8 @@ const views = {
             h("dt", {}, "Kada"), h("dd", {}, whenText(e)),
             h("dt", {}, "Gdje"), h("dd", {}, [e.mjesto, e.grad, e.drzava].filter(Boolean).join(", ")),
             e.ulaz ? [h("dt", {}, "Ulaz"), h("dd", {}, e.ulaz)] : null,
-            h("dt", {}, "Organizator"), h("dd", {}, authorLink(e.autor))),
+            h("dt", {}, "Organizator"), h("dd", {}, e.izvor ? e.izvor : authorLink(e.autor))),
+          e.kalendar ? h("p", { class: "hint" }, "Događaj je preuzet iz organizatorova javnog kalendara. Provjeri pojedinosti kod organizatora.") : null,
           e.poveznica ? h("div", {}, h("a", { class: "btn", href: e.poveznica, target: "_blank", rel: "noopener nofollow ugc" }, "Ulaznice i više informacija")) : null,
           h("p", { class: "prose" }, e.opis),
           past ? null : h("div", { class: "actions" }, ...calLinks(e)),
@@ -909,6 +937,52 @@ const views = {
     redraw();
   },
 
+  async kalendari(_, alive) {
+    if (!me?.admin) { go("/"); return; }
+    const list = h("div", { class: "stack" }, loading());
+    $("main").replaceChildren(h("a", { class: "back", href: "/dogadaji" }, "Natrag na događaje"),
+      pageHead("Kalendari događaja", "Događaji iz ovih javnih kalendara (Google kalendar, iCal, .ics) automatski se dodaju u Događaje svako jutro. Promjene i otkazivanja u kalendaru prenose se sami.",
+        h("button", { class: "btn", type: "button", onclick: () => calForm() }, "Dodaj kalendar")),
+      list);
+    const rows = await q(sb.from("kalendari").select("*").order("created_at"));
+    if (!alive()) return;
+    const counts = {};
+    if (rows.length) (await q(sb.from("dogadaji").select("kalendar").in("kalendar", rows.map(r => r.id)).gte("pocetak", new Date().toISOString()))).forEach(d => { counts[d.kalendar] = (counts[d.kalendar] || 0) + 1; });
+    if (!alive()) return;
+    const importNow = (c, btn) => async () => {
+      btn.disabled = true; btn.textContent = "Uvozim…";
+      try {
+        await q(sb.rpc("kalendar_uvezi", { p_id: c.id }));
+        let r = { stanje: "ceka" };
+        for (let i = 0; i < 10 && r.stanje === "ceka"; i++) { await new Promise(ok => setTimeout(ok, 2500)); r = await q(sb.rpc("kalendar_stanje", { p_id: c.id })); }
+        if (r.stanje === "gotovo") toast(`Uvezeno: ${plural(r.broj || 0, "događaj", "događaja", "događaja")}`);
+        else if (r.stanje === "ceka") toast("Kalendar se još učitava. Osvježi stranicu za minutu.");
+        else toast(r.greska || "Uvoz nije uspio.");
+      } catch (e) { toast(errText(e)); }
+      refresh();
+    };
+    const toggle = c => async () => { try { await q(sb.from("kalendari").update({ aktivan: !c.aktivan }).eq("id", c.id)); refresh(); } catch (e) { toast(errText(e)); } };
+    const remove = c => async () => {
+      if (!confirm(`Ukloniti kalendar „${c.naziv}” i sve njegove događaje sa stranice?`)) return;
+      try { await q(sb.from("kalendari").delete().eq("id", c.id)); toast("Kalendar je uklonjen"); refresh(); } catch (e) { toast(errText(e)); }
+    };
+    fill(list, rows.map(c => {
+      const btn = h("button", { class: "btn small", type: "button" }, "Uvezi sada");
+      btn.onclick = importNow(c, btn);
+      return h("article", { class: "post" },
+        h("div", { class: "meta" }, h("span", { class: "tag" }, c.aktivan ? "Uključen" : "Isključen"), h("span", {}, c.vrsta), h("span", {}, place(c)),
+          h("span", {}, c.zadnji_uvoz ? "zadnji uvoz: " + date(c.zadnji_uvoz) : "još nije uvezen"),
+          h("span", {}, "nadolazećih: " + (counts[c.id] || 0))),
+        h("h3", {}, c.naziv),
+        h("p", { class: "hint" }, c.url),
+        c.greska ? h("p", { class: "err" }, c.greska) : null,
+        h("div", { class: "actions" }, btn,
+          h("button", { class: "btn small quiet", type: "button", onclick: () => calForm(c) }, "Uredi"),
+          h("button", { class: "btn small quiet", type: "button", onclick: toggle(c) }, c.aktivan ? "Isključi" : "Uključi"),
+          h("button", { class: "btn small quiet", type: "button", onclick: remove(c) }, "Ukloni")));
+    }), emptyBox("Još nema kalendara", "Zamoli klub, festival ili bend za javnu adresu njihova kalendara u iCal obliku i dodaj je ovdje."));
+  },
+
   /* ---------------- Pravila ---------------- */
   async privatnost() { legalPage(window.PRAVNO.privatnost); },
   async uvjeti() { legalPage(window.PRAVNO.uvjeti); },
@@ -1017,7 +1091,7 @@ const views = {
       avatarEditor(),
       h("label", { class: "check", for: "r-obavijesti" }, notif, h("span", {}, "Pošalji mi e-poruku kad netko odgovori na moju temu na forumu")),
       h("label", { class: "check", for: "r-pretrage" }, notifS, h("span", {}, "Pošalji mi e-poruku kad se pojavi novi oglas za moje spremljene pretrage")),
-      me?.admin ? h("p", {}, h("span", { class: "tag" }, "Administrator"), " Možeš brisati sve objave. ", h("a", { href: "/prijave" }, reportCount ? `Otvorene prijave: ${reportCount}` : "Pregled prijava")) : null,
+      me?.admin ? h("p", {}, h("span", { class: "tag" }, "Administrator"), " Možeš brisati sve objave. ", h("a", { href: "/prijave" }, reportCount ? `Otvorene prijave: ${reportCount}` : "Pregled prijava"), " · ", h("a", { href: "/kalendari" }, "Kalendari događaja")) : null,
       h("div", { class: "actions" },
         h("a", { class: "btn quiet", href: "/korisnik/" + uid() }, "Moj javni profil"),
         h("a", { class: "btn quiet", href: "/zaboravljena-lozinka" }, "Promijeni lozinku"),
@@ -1182,7 +1256,7 @@ function authPage(title, text, fields, submitLabel, run, links = [], google = tr
 /* ------------------------------------------------------------------ */
 /* Usmjeravanje i pokretanje                                           */
 /* ------------------------------------------------------------------ */
-const NAV_OF = { dogadaj: "dogadaji", tema: "forum", oprema: "ocjene", oglas: "oglasi", posao: "poslovi", prijava: "account", registracija: "account", racun: "account", prijave: "account" };
+const NAV_OF = { dogadaj: "dogadaji", tema: "forum", oprema: "ocjene", oglas: "oglasi", posao: "poslovi", prijava: "account", registracija: "account", racun: "account", prijave: "account", kalendari: "dogadaji" };
 
 const TITLE = "BisStage – oglasnik instrumenata, poslovi za glazbenike i forum";
 function setTitle(t) { document.title = t ? `${t} – BisStage` : TITLE; }

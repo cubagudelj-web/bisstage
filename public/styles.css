@@ -272,3 +272,4 @@ footer .wrap { padding-block: 18px; display: flex; flex-wrap: wrap; gap: 8px 24p
 }
 @media (max-width: 420px) { .grid2 { grid-template-columns: minmax(0, 1fr); } }
 @media (prefers-reduced-motion: reduce) { .door .head, .door .stem { transition: none; } }
+.post .hint { overflow-wrap: anywhere; }
