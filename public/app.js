@@ -5,8 +5,7 @@
 /* ------------------------------------------------------------------ */
 const CFG = window.BISSTAGE || {};
 const COUNTRIES = ["Hrvatska", "Slovenija", "Bosna i Hercegovina", "Srbija", "Crna Gora", "Sjeverna Makedonija"];
-const CATS = ["Gitare i basovi", "Bubnjevi i udaraljke", "Klavijature", "Gudački", "Puhački", "Tamburice", "Ozvučenje", "Studijska oprema"];
-const OPREMA_CATS = ["Gitare i basovi", "Gitarske pedale i pojačala", ...CATS.slice(1)];
+const CATS = ["Gitare i basovi", "Gitarske pedale i pojačala", "Bubnjevi i udaraljke", "Klavijature", "Gudački", "Puhački", "Tamburice", "Ozvučenje", "Studijska oprema"];
 const CONDS = ["Novo", "Kao novo", "Korišteno", "Za popravak"];
 const CURS = { EUR: "€", KM: "KM", RSD: "RSD", MKD: "MKD" };
 const JOBS = ["Svirka", "Stalni angažman", "Studijsko snimanje", "Poduka", "Bend traži člana"];
@@ -803,7 +802,7 @@ const views = {
     const add = () => {
       if (needLogin()) return;
       openForm({ title: "Nova oprema", submit: "Dodaj opremu", done: "Dodano",
-        fields: [{ name: "naziv", label: "Proizvođač i model", required: true, max: 90, min_len: 2 }, { name: "kategorija", label: "Kategorija", options: OPREMA_CATS, required: true },
+        fields: [{ name: "naziv", label: "Proizvođač i model", required: true, max: 90, min_len: 2 }, { name: "kategorija", label: "Kategorija", options: CATS, required: true },
           { name: "slika", label: "Fotografija (nije obavezno)", type: "file", multiple: false, hint: "Tvoja fotografija ovog modela. Ne koristi tuđe slike s interneta." }],
         save: async (v, files) => {
           const id = crypto.randomUUID();
@@ -814,7 +813,7 @@ const views = {
     };
     $("main").replaceChildren(
       pageHead("Ocjene opreme", "Svaki model ocjenjuje se od 1 do 5 za zvuk, izradu i vrijednost za novac.", h("button", { class: "btn", type: "button", onclick: add }, "Dodaj opremu")),
-      h("div", { class: "tools one" }, search("q-ocjene", "Pretraži", st, "npr. pojačalo"), pick("k-ocjene", "Kategorija", st, "kat", OPREMA_CATS)),
+      h("div", { class: "tools one" }, search("q-ocjene", "Pretraži", st, "npr. pojačalo"), pick("k-ocjene", "Kategorija", st, "kat", CATS)),
       list);
     const rows = await q(sb.from("oprema_pregled").select("*").order("broj_ocjena", { ascending: false }).order("prosjek", { ascending: false, nullsFirst: false }).limit(LIMIT));
     if (!alive()) return;
