@@ -186,7 +186,7 @@ a.author:hover { color: var(--accent); text-decoration-color: currentColor; }
 .day-group h2 { font-size: 1.15rem; font-weight: 700; }
 .event-page { display: grid; grid-template-columns: minmax(0, 340px) minmax(0, 1fr); gap: 28px; align-items: start; }
 .event-page:not(:has(.poster)) { grid-template-columns: minmax(0, 1fr); max-width: 46em; }
-.poster img { width: 100%; border-radius: 8px; display: block; background: var(--accent-soft); }
+.poster img { width: 100%; height: auto; border-radius: 8px; display: block; background: var(--accent-soft); }
 .event-page h1 { font-size: clamp(1.9rem, 5vw, 2.8rem); font-weight: 800; letter-spacing: -.02em; margin-top: 8px; overflow-wrap: anywhere; }
 .facts { display: grid; grid-template-columns: auto minmax(0, 1fr); gap: 6px 16px; margin: 0; }
 .facts dt { color: var(--muted); font-size: .88rem; padding-top: 2px; }

@@ -584,6 +584,53 @@ function calForm(existing) {
     },
   });
 }
+/* Automatski BisStage plakat za događaje bez fotografije (1200 × 630, kao pregled pri dijeljenju). */
+const POSTER_BOJE = { "Koncert": "#2a2fd6", "Festival": "#c2410c", "Tečaj ili radionica": "#0f766e", "Jam session": "#6d28d9",
+  "Audicija ili natjecanje": "#be185d", "Sajam opreme": "#166534", "Ostalo": "#15173c" };
+function autoPoster(e) {
+  const img = h("img", { alt: "Plakat: " + e.naziv, width: 1200, height: 630 });
+  drawPoster(e).then(c => { img.src = c.toDataURL("image/jpeg", 0.9); }).catch(() => img.remove());
+  return img;
+}
+async function drawPoster(e) {
+  try { await Promise.all(["800 90px 'Bricolage Grotesque'", "600 40px 'Instrument Sans'", "700 26px 'JetBrains Mono'"].map(f => document.fonts.load(f))); } catch {}
+  const W = 1200, H = 630, c = document.createElement("canvas");
+  c.width = W; c.height = H;
+  const x = c.getContext("2d");
+  x.fillStyle = POSTER_BOJE[e.vrsta] || "#2a2fd6"; x.fillRect(0, 0, W, H);
+  x.fillStyle = "#ffc83d"; x.beginPath(); x.arc(1110, 40, 230, 0, Math.PI * 2); x.fill();
+  x.fillStyle = "rgba(255,255,255,.14)"; x.beginPath(); x.arc(990, 330, 34, 0, Math.PI * 2); x.fill();
+  x.textBaseline = "alphabetic";
+  x.fillStyle = "#ffffff"; x.font = "800 34px 'Bricolage Grotesque', Arial, sans-serif"; x.fillText("BisStage", 72, 92);
+  x.fillStyle = "#ffc83d"; x.font = "700 24px 'JetBrains Mono', monospace"; x.fillText(String(e.vrsta || "Događaj").toUpperCase(), 72, 142);
+  // naziv: najviše 3 retka, slova se smanjuju dok ne stane
+  const maxW = 820, words = String(e.naziv || "").split(/\s+/).filter(Boolean);
+  let size = 96, lines = [];
+  for (; size >= 44; size -= 4) {
+    x.font = `800 ${size}px 'Bricolage Grotesque', Arial, sans-serif`;
+    lines = []; let line = "";
+    for (const w of words) {
+      const t = line ? line + " " + w : w;
+      if (x.measureText(t).width <= maxW || !line) line = t; else { lines.push(line); line = w; }
+    }
+    if (line) lines.push(line);
+    if (lines.length <= 3 && lines.every(l => x.measureText(l).width <= maxW)) break;
+  }
+  if (lines.length > 3) { lines = lines.slice(0, 3); lines[2] = lines[2].replace(/\s*\S*$/, "") + "…"; }
+  x.fillStyle = "#ffffff";
+  const lh = size * 1.02, top = 160 + (3 - lines.length) * lh * 0.35;
+  lines.forEach((l, i) => x.fillText(l, 72, top + lh * (i + 1)));
+  // datum i mjesto
+  const a = new Date(e.pocetak);
+  let kad = a.toLocaleDateString("hr-HR", { weekday: "long", day: "numeric", month: "long", year: "numeric" });
+  kad = kad[0].toUpperCase() + kad.slice(1) + (e.cijeli_dan ? "" : ` · ${hm(a)}`);
+  const gdje = [...new Set([e.mjesto, e.grad].filter(Boolean))].join(", ");
+  const fit = (t, font, w) => { x.font = font; if (x.measureText(t).width <= w) return t; while (t && x.measureText(t + "…").width > w) t = t.slice(0, -1); return t + "…"; };
+  x.fillStyle = "#ffc83d"; x.fillText(fit(kad, "600 40px 'Instrument Sans', Arial, sans-serif", W - 144), 72, 528);
+  x.fillStyle = "#ffffff"; x.fillText(fit(gdje, "400 32px 'Instrument Sans', Arial, sans-serif", W - 400), 72, 576);
+  x.fillStyle = "rgba(255,255,255,.75)"; x.font = "700 22px 'JetBrains Mono', monospace"; x.textAlign = "right"; x.fillText("bisstage.com", W - 72, 576);
+  return c;
+}
 function eventForm(existing) {
   if (needLogin()) return;
   openForm({
@@ -599,7 +646,8 @@ function eventForm(existing) {
       { name: "ulaz", label: "Ulaz (nije obavezno)", max: 60, hint: "npr. Besplatno, 10 €, pretprodaja 8 €" },
       { name: "poveznica", label: "Poveznica za ulaznice ili više informacija (nije obavezno)", type: "url", max: 300 },
       { name: "opis", label: "Opis", type: "textarea", required: true },
-      { name: "plakat", label: "Plakat ili fotografija (nije obavezno)", type: "file", multiple: false, hint: existing?.plakat ? "Ako odabereš novu, zamijenit će postojeću." : "Koristi plakat ili fotografiju za koju imaš pravo objave." }],
+      { name: "plakat", label: "Plakat ili fotografija (nije obavezno)", type: "file", multiple: false, hint: existing?.plakat && !existing.plakat_auto ? "Ako odabereš novu, zamijenit će postojeću." : "Bez fotografije stranica sama napravi BisStage plakat. Dodaj samo sliku za koju imaš pravo objave." },
+      ...(existing?.plakat && !existing.plakat_auto ? [{ name: "slika", label: "Postojeća fotografija", options: [["zadrzi", "Zadrži"], ["auto", "Ukloni i koristi BisStage plakat"]] }] : [])],
     save: async (v, files) => {
       const start = new Date(v.pocetak), end = v.kraj ? new Date(v.kraj) : null;
       if (isNaN(start)) throw new UserError("Upiši datum i vrijeme početka.");
@@ -612,11 +660,23 @@ function eventForm(existing) {
       const row = { naziv: v.naziv, vrsta: v.vrsta, pocetak: start.toISOString(), kraj: end ? end.toISOString() : null, mjesto: v.mjesto, grad: v.grad, drzava: v.drzava,
         ulaz: v.ulaz || null, poveznica: link, opis: v.opis, izvor: (v.izvor || "").trim() || null };
       let old = null;
+      const mine = (existing?.autor || uid()) === uid(); // slika se sprema u mapu autora
       if (files[0]) {
         const blob = await shrink(files[0]);
         row.plakat = `${uid()}/dogadaji/${id}/${crypto.randomUUID()}.jpg`;
         await q(sb.storage.from("slike").upload(row.plakat, blob, { contentType: "image/jpeg", upsert: false }));
+        row.plakat_auto = false;
         old = existing?.plakat;
+      } else if (mine && (!existing?.plakat || existing.plakat_auto || v.slika === "auto")) {
+        // automatski plakat: novi događaj, događaj bez slike ili promijenjeni podaci
+        const canvas = await drawPoster({ ...existing, ...row });
+        const blob = await new Promise(r => canvas.toBlob(r, "image/jpeg", 0.9));
+        if (blob) {
+          row.plakat = `${uid()}/dogadaji/${id}/${crypto.randomUUID()}.jpg`;
+          await q(sb.storage.from("slike").upload(row.plakat, blob, { contentType: "image/jpeg", upsert: false }));
+          row.plakat_auto = true;
+          old = existing?.plakat;
+        }
       }
       if (existing) await q(sb.from("dogadaji").update(row).eq("id", id));
       else await q(sb.from("dogadaji").insert({ id, ...row }));
@@ -715,7 +775,8 @@ const views = {
     const past = endOf < new Date();
     $("main").replaceChildren(h("a", { class: "back", href: "/dogadaji" }, "Natrag na događaje"),
       h("div", { class: "event-page" },
-        e.plakat ? h("button", { type: "button", class: "thumb-btn poster", "aria-label": "Povećaj plakat", onclick: () => openGallery([e.plakat], 0, e.naziv) }, h("img", { src: imgUrl(e.plakat), alt: "Plakat: " + e.naziv })) : null,
+        e.plakat ? h("button", { type: "button", class: "thumb-btn poster", "aria-label": "Povećaj plakat", onclick: () => openGallery([e.plakat], 0, e.naziv) }, h("img", { src: imgUrl(e.plakat), alt: "Plakat: " + e.naziv }))
+          : h("div", { class: "poster" }, autoPoster(e)),
         h("div", { class: "stack" },
           h("div", { class: "head-row" }, h("div", {}, h("span", { class: "tag" }, e.vrsta), h("h1", {}, e.naziv))),
           past ? h("p", { class: "err" }, "Ovaj je događaj završio.") : null,
