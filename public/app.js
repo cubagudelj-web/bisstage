@@ -1011,7 +1011,9 @@ const views = {
         } });
     };
     $("main").replaceChildren(
-      pageHead("Ocjene opreme", "Svaki model ocjenjuje se od 1 do 5 za zvuk, izradu i vrijednost za novac.", h("button", { class: "btn", type: "button", onclick: add }, "Dodaj opremu")),
+      pageHead("Ocjene opreme", "Svaki model ocjenjuje se od 1 do 5 za zvuk, izradu i vrijednost za novac.", h("div", { class: "actions" },
+        me?.admin ? h("a", { class: "btn quiet", href: "/uvoz-opreme" }, "Uvezi popis") : null,
+        h("button", { class: "btn", type: "button", onclick: add }, "Dodaj opremu"))),
       h("div", { class: "tools one" }, search("q-ocjene", "Pretraži", st, "npr. pojačalo"), pick("k-ocjene", "Kategorija", st, "kat", CATS)),
       list);
     const rows = await q(sb.from("oprema_pregled").select("*").order("broj_ocjena", { ascending: false }).order("prosjek", { ascending: false, nullsFirst: false }).limit(LIMIT));
@@ -1157,6 +1159,70 @@ const views = {
           h("td", {}, u.nacin === "google" ? "Google" : "E-mail"), h("td", {}, when(u.created_at)), h("td", {}, when(u.last_sign_in_at)),
           h("td", { class: u.potvrden ? "" : "muted" }, u.potvrden ? "da" : "čeka potvrdu")))))),
       h("p", { class: "hint" }, "Broj posjeta (i onih koji se nisu registrirali) vidiš u Cloudflareu: Workers & Pages → bisstage → Metrics → Web Analytics."));
+  },
+  async "uvoz-opreme"(_, alive) {
+    if (!me?.admin) { go("/"); return; }
+    const norm = t => String(t || "").trim().toLowerCase().replace(/ž/g, "z").replace(/[čć]/g, "c").replace(/š/g, "s").replace(/đ/g, "d").replace(/\s+/g, " ");
+    const katOf = Object.fromEntries(CATS.map(c => [norm(c), c]));
+    const ta = h("textarea", { id: "uvoz-oprema", rows: 12, spellcheck: "false",
+      placeholder: "Klavijature;Yamaha P-45\nStudijska oprema;Focusrite Scarlett 2i2 4th Gen\n\nMože i cijela tablica kopirana iz dokumenta (Kategorija, Model, Vrsta)." });
+    const zadana = h("select", { id: "uvoz-oprema-kat" }, h("option", { value: "" }, "Nema (svaki red ima kategoriju)"), CATS.map(c => h("option", { value: c }, c)));
+    const out = h("div", { class: "stack" });
+    let rows = [];
+    const preview = async () => {
+      const lines = ta.value.split(/\r?\n/).map(l => l.trim()).filter(Boolean);
+      rows = [];
+      for (const l of lines) {
+        let cells = (l.includes("\t") ? l.split("\t") : l.includes("|") ? l.replace(/^\||\|$/g, "").split("|") : l.split(";")).map(c => c.trim());
+        if (cells.every(c => /^:?-{2,}:?$/.test(c) || !c)) continue;              // crta ispod zaglavlja tablice
+        if (cells.some(c => norm(c) === "model")) continue;                          // red sa zaglavljem
+        let kat = katOf[norm(cells[0])], naziv = kat ? cells[1] : cells[0];
+        if (!kat) kat = zadana.value || null;
+        naziv = (naziv || "").replace(/\s+/g, " ").trim();
+        const greske = [];
+        if (!kat) greske.push("nepoznata kategorija");
+        if (naziv.length < 2 || naziv.length > 90) greske.push("naziv mora imati 2–90 znakova");
+        rows.push({ naziv, kat, greske });
+      }
+      if (!rows.length) { out.replaceChildren(h("p", { class: "err" }, "Zalijepi popis opreme.")); return; }
+      const ex = await q(sb.from("oprema").select("naziv").limit(5000));
+      const have = new Set(ex.map(e => norm(e.naziv)));
+      const seen = new Set();
+      rows.forEach(r => { const k = norm(r.naziv); if (have.has(k)) r.vec = "već postoji"; else if (seen.has(k)) r.vec = "dvaput na popisu"; seen.add(k); r.odabran = !r.greske.length && !r.vec; });
+      draw();
+    };
+    const draw = () => {
+      const n = rows.filter(r => r.odabran).length;
+      const btn = h("button", { class: "btn", type: "button", disabled: !n }, `Dodaj odabrane (${n})`);
+      btn.onclick = async () => {
+        btn.disabled = true; let gotovo = 0, palo = 0;
+        const sel = rows.filter(r => r.odabran);
+        for (let i = 0; i < sel.length; i += 25) {           // u paketima od 25
+          const part = sel.slice(i, i + 25);
+          btn.textContent = `Dodajem ${Math.min(i + 25, sel.length)} / ${sel.length}…`;
+          try { await q(sb.from("oprema").insert(part.map(r => ({ naziv: r.naziv, kategorija: r.kat })))); part.forEach(r => { r.odabran = false; r.dodan = true; }); gotovo += part.length; }
+          catch (e) { part.forEach(r => { r.odabran = false; r.greske.push(errText(e)); }); palo += part.length; }
+        }
+        toast(`Dodano: ${gotovo}` + (palo ? `, nije uspjelo: ${palo}` : ""));
+        draw();
+      };
+      out.replaceChildren(
+        h("div", { class: "table-wrap" }, h("table", { class: "stats" },
+          h("thead", {}, h("tr", {}, h("th", {}, ""), h("th", {}, "Model"), h("th", {}, "Kategorija"), h("th", {}, "Stanje"))),
+          h("tbody", {}, ...rows.map(r => {
+            const cb = h("input", { type: "checkbox", checked: r.odabran, disabled: !!r.greske.length || r.dodan, "aria-label": "Dodaj " + r.naziv });
+            cb.onchange = () => { r.odabran = cb.checked; draw(); };
+            return h("tr", {}, h("td", {}, cb), h("td", {}, h("b", {}, r.naziv || "—")), h("td", {}, r.kat || "—"),
+              h("td", { class: r.greske.length ? "err" : r.vec ? "muted" : "" }, r.dodan ? "dodano" : r.greske.length ? r.greske.join("; ") : r.vec || "spremno"));
+          })))),
+        h("div", { class: "actions" }, btn, rows.some(r => r.dodan) ? h("a", { class: "btn quiet", href: "/ocjene" }, "Na Ocjene opreme") : null));
+    };
+    $("main").replaceChildren(h("a", { class: "back", href: "/ocjene" }, "Natrag na Ocjene opreme"),
+      pageHead("Uvoz opreme", "Zalijepi popis modela: u svakom redu kategorija i model, odvojeni točka-zarezom. Može i tablica kopirana iz dokumenta. Fotografije dodaješ poslije, na stranici svakog modela."),
+      h("label", { for: "uvoz-oprema" }, "Popis opreme"), ta,
+      h("label", { for: "uvoz-oprema-kat" }, "Kategorija za redove bez kategorije"), zadana,
+      h("div", { class: "actions" }, h("button", { class: "btn quiet", type: "button", onclick: () => preview().catch(e => toast(errText(e))) }, "Pregledaj")),
+      out);
   },
   async "uvoz-dogadaja"(_, alive) {
     if (!me?.admin) { go("/"); return; }
@@ -1542,7 +1608,7 @@ function authPage(title, text, fields, submitLabel, run, links = [], google = tr
 /* ------------------------------------------------------------------ */
 /* Usmjeravanje i pokretanje                                           */
 /* ------------------------------------------------------------------ */
-const NAV_OF = { dogadaj: "dogadaji", tema: "forum", oprema: "ocjene", oglas: "oglasi", posao: "poslovi", prijava: "account", registracija: "account", racun: "account", prijave: "account", kalendari: "dogadaji", statistika: "account", "uvoz-dogadaja": "dogadaji" };
+const NAV_OF = { dogadaj: "dogadaji", tema: "forum", oprema: "ocjene", oglas: "oglasi", posao: "poslovi", prijava: "account", registracija: "account", racun: "account", prijave: "account", kalendari: "dogadaji", statistika: "account", "uvoz-dogadaja": "dogadaji", "uvoz-opreme": "ocjene" };
 
 const TITLE = "BisStage – oglasnik instrumenata, poslovi za glazbenike i forum";
 function setTitle(t) { document.title = t ? `${t} – BisStage` : TITLE; }
