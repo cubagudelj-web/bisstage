@@ -656,6 +656,60 @@ async function drawPoster(e) {
   x.fillStyle = "rgba(255,255,255,.75)"; x.font = "700 22px 'JetBrains Mono', monospace"; x.textAlign = "right"; x.fillText("bisstage.com", W - 72, 576);
   return c;
 }
+/* Uvoz više događaja odjednom: CSV (odvojeno točka-zarezom ili zarezom), prvi red su nazivi stupaca. */
+const UVOZ_STUPCI = ["naziv", "vrsta", "datum", "vrijeme", "mjesto", "grad", "drzava", "poveznica", "organizator", "ulaz", "opis"];
+function parseCsv(text) {
+  text = String(text || "").replace(/^﻿/, "").trim();
+  const first = text.split(/\r?\n/)[0] || "";
+  const sep = (first.match(/;/g) || []).length >= (first.match(/,/g) || []).length ? ";" : ",";
+  const rows = []; let row = [], cell = "", inQ = false;
+  for (let i = 0; i < text.length; i++) {
+    const ch = text[i];
+    if (inQ) { if (ch === '"' && text[i + 1] === '"') { cell += '"'; i++; } else if (ch === '"') inQ = false; else cell += ch; continue; }
+    if (ch === '"' && cell === "") inQ = true;
+    else if (ch === sep) { row.push(cell); cell = ""; }
+    else if (ch === "\n" || ch === "\r") { if (ch === "\r" && text[i + 1] === "\n") i++; row.push(cell); rows.push(row); row = []; cell = ""; }
+    else cell += ch;
+  }
+  row.push(cell); rows.push(row);
+  return rows.filter(r => r.some(c => c.trim()));
+}
+function uvozRedovi(text) {
+  const rows = parseCsv(text);
+  if (!rows.length) return [];
+  const norm = t => t.trim().toLowerCase().replace(/ž/g, "z").replace(/[čć]/g, "c").replace(/š/g, "s").replace(/đ/g, "d");
+  let head = rows[0].map(norm), body = rows.slice(1);
+  if (!head.includes("naziv")) { head = UVOZ_STUPCI; body = rows; } // bez reda s nazivima: zadani redoslijed
+  const drzave = Object.fromEntries(COUNTRIES.map(c => [norm(c), c]).concat([["bih", "Bosna i Hercegovina"], ["croatia", "Hrvatska"], ["slovenia", "Slovenija"], ["serbia", "Srbija"], ["montenegro", "Crna Gora"], ["north macedonia", "Sjeverna Makedonija"], ["makedonija", "Sjeverna Makedonija"]]));
+  const vrste = Object.fromEntries(EVENT_TYPES.map(v => [norm(v), v]));
+  return body.map(r => {
+    const o = {}; head.forEach((k, i) => { o[k] = (r[i] || "").trim(); });
+    const greske = [];
+    let d = o.datum, m;
+    if ((m = d.match(/^(\d{4})-(\d{1,2})-(\d{1,2})$/))) d = [m[1], m[2], m[3]];
+    else if ((m = d.match(/^(\d{1,2})\.\s*(\d{1,2})\.\s*(\d{4})\.?$/))) d = [m[3], m[2], m[1]];
+    else { d = null; greske.push("datum nije u obliku 2027-03-06 ili 6. 3. 2027."); }
+    let t = (o.vrijeme || "").replace(".", ":"), bezVremena = !t;
+    if (t && !/^\d{1,2}:\d{2}$/.test(t)) { greske.push("vrijeme nije u obliku 20:00"); t = ""; }
+    const start = d ? new Date(+d[0], +d[1] - 1, +d[2], ...(t || "20:00").split(":").map(Number)) : null;
+    if (start && isNaN(start)) greske.push("nepostojeći datum");
+    else if (start && start < new Date()) greske.push("datum je prošao");
+    const drzava = drzave[norm(o.drzava || "Hrvatska")];
+    if (!drzava) greske.push("država nije iz regije");
+    const vrsta = vrste[norm(o.vrsta || "Koncert")] || "Koncert";
+    let link = o.poveznica || null;
+    if (link && !/^https?:\/\//i.test(link)) link = "https://" + link;
+    if (link && (!/^https?:\/\/[^\s<>"]+$/.test(link) || link.length > 300)) { greske.push("poveznica nije ispravna"); link = null; }
+    if ((o.naziv || "").length < 3) greske.push("nema naziva");
+    if (!o.mjesto) greske.push("nema mjesta");
+    if (!o.grad) greske.push("nema grada");
+    let opis = (o.opis || "").slice(0, 3000) || `${vrsta}: ${o.naziv}, ${[o.mjesto, o.grad].filter(Boolean).join(", ")}.`;
+    if (bezVremena) opis += " Točno vrijeme provjeri kod organizatora.";
+    return { greske, row: { naziv: (o.naziv || "").slice(0, 120), vrsta, pocetak: start && !isNaN(start) ? start.toISOString() : null, kraj: null,
+      mjesto: (o.mjesto || "").slice(0, 120), grad: (o.grad || "").slice(0, 60), drzava, ulaz: (o.ulaz || "").slice(0, 80) || null, poveznica: link,
+      opis, izvor: (o.organizator || "").slice(0, 120) || null } };
+  });
+}
 function eventForm(existing) {
   if (needLogin()) return;
   openForm({
@@ -1104,12 +1158,77 @@ const views = {
           h("td", { class: u.potvrden ? "" : "muted" }, u.potvrden ? "da" : "čeka potvrdu")))))),
       h("p", { class: "hint" }, "Broj posjeta (i onih koji se nisu registrirali) vidiš u Cloudflareu: Workers & Pages → bisstage → Metrics → Web Analytics."));
   },
+  async "uvoz-dogadaja"(_, alive) {
+    if (!me?.admin) { go("/"); return; }
+    const ta = h("textarea", { id: "uvoz-csv", rows: 10, spellcheck: "false", placeholder: "naziv;vrsta;datum;vrijeme;mjesto;grad;drzava;poveznica;organizator;ulaz;opis\nSenidah;Koncert;2027-03-06;20:00;Arena Varaždin;Varaždin;Hrvatska;https://www.eventim.hr/...;TIPO marketing;;Koncert Senidah u Varaždinu." });
+    const out = h("div", { class: "stack" });
+    let parsed = [];
+    const preview = async () => {
+      parsed = uvozRedovi(ta.value);
+      if (!parsed.length) { out.replaceChildren(h("p", { class: "err" }, "Zalijepi popis događaja.")); return; }
+      // već objavljeni: isti naziv istog dana
+      const ok = parsed.filter(p => p.row.pocetak);
+      if (ok.length) {
+        const times = ok.map(p => +new Date(p.row.pocetak));
+        const ex = await q(sb.from("dogadaji").select("naziv,pocetak").gte("pocetak", new Date(Math.min(...times) - 864e5).toISOString()).lte("pocetak", new Date(Math.max(...times) + 864e5).toISOString()).limit(2000));
+        const key = (n, t) => n.trim().toLowerCase() + "|" + new Date(t).toDateString();
+        const have = new Set(ex.map(e => key(e.naziv, e.pocetak)));
+        parsed.forEach(p => { if (p.row.pocetak && have.has(key(p.row.naziv, p.row.pocetak))) p.vec = true; });
+      }
+      parsed.forEach(p => { p.odabran = !p.greske.length && !p.vec; });
+      draw();
+    };
+    const draw = () => {
+      const n = parsed.filter(p => p.odabran).length;
+      const btn = h("button", { class: "btn", type: "button", disabled: !n }, `Objavi odabrane (${n})`);
+      btn.onclick = async () => {
+        btn.disabled = true; let gotovo = 0, palo = 0;
+        for (const p of parsed.filter(x => x.odabran)) {
+          btn.textContent = `Objavljujem ${gotovo + palo + 1} / ${n}…`;
+          try {
+            const id = crypto.randomUUID(), row = { ...p.row, id };
+            const canvas = await drawPoster(row);
+            const blob = await new Promise(r => canvas.toBlob(r, "image/jpeg", 0.9));
+            if (blob) {
+              row.plakat = `${uid()}/dogadaji/${id}/${crypto.randomUUID()}.jpg`;
+              await q(sb.storage.from("slike").upload(row.plakat, blob, { contentType: "image/jpeg", upsert: false }));
+              row.plakat_auto = true;
+            }
+            await q(sb.from("dogadaji").insert(row));
+            p.odabran = false; p.objavljen = true; gotovo++;
+          } catch (e) { p.greske.push(errText(e)); p.odabran = false; palo++; }
+        }
+        toast(`Objavljeno: ${gotovo}` + (palo ? `, nije uspjelo: ${palo}` : ""));
+        draw();
+      };
+      out.replaceChildren(
+        h("div", { class: "table-wrap" }, h("table", { class: "stats" },
+          h("thead", {}, h("tr", {}, h("th", {}, ""), h("th", {}, "Događaj"), h("th", {}, "Kada"), h("th", {}, "Gdje"), h("th", {}, "Stanje"))),
+          h("tbody", {}, ...parsed.map(p => {
+            const cb = h("input", { type: "checkbox", checked: p.odabran, disabled: !!p.greske.length || p.objavljen, "aria-label": "Objavi " + p.row.naziv });
+            cb.onchange = () => { p.odabran = cb.checked; draw(); };
+            const st = p.objavljen ? "objavljeno" : p.greske.length ? p.greske.join("; ") : p.vec ? "već postoji isti naziv istog dana" : "spremno";
+            return h("tr", {}, h("td", {}, cb), h("td", {}, h("b", {}, p.row.naziv || "—"), h("br"), h("span", { class: "muted" }, [p.row.vrsta, p.row.izvor].filter(Boolean).join(" · "))),
+              h("td", {}, p.row.pocetak ? new Date(p.row.pocetak).toLocaleString("hr-HR", { day: "numeric", month: "numeric", year: "numeric", hour: "2-digit", minute: "2-digit" }) : "—"),
+              h("td", {}, [p.row.mjesto, p.row.grad].filter(Boolean).join(", ")),
+              h("td", { class: p.greske.length ? "err" : p.vec ? "muted" : "" }, st));
+          })))),
+        h("div", { class: "actions" }, btn));
+    };
+    $("main").replaceChildren(h("a", { class: "back", href: "/kalendari" }, "Natrag na kalendare"),
+      pageHead("Uvoz više događaja", "Zalijepi popis događaja, npr. iz tjednog popisa koncerata. Prvi red su nazivi stupaca, a stupci se odvajaju točka-zarezom ili zarezom. Svaki događaj dobiva BisStage plakat."),
+      h("details", { class: "post" }, h("summary", {}, "Stupci i primjer"),
+        h("p", { class: "hint" }, "naziv; vrsta (Koncert, Festival, Jam session…); datum (2027-03-06 ili 6. 3. 2027.); vrijeme (20:00, može ostati prazno); mjesto; grad; drzava (Hrvatska, Slovenija, Bosna i Hercegovina, Srbija, Crna Gora, Sjeverna Makedonija); poveznica (službena prodaja ulaznica); organizator; ulaz; opis (vlastitim riječima, može ostati prazno)")),
+      h("label", { for: "uvoz-csv" }, "Popis događaja"), ta,
+      h("div", { class: "actions" }, h("button", { class: "btn quiet", type: "button", onclick: () => preview().catch(e => toast(errText(e))) }, "Pregledaj")),
+      out);
+  },
   async kalendari(_, alive) {
     if (!me?.admin) { go("/"); return; }
     const list = h("div", { class: "stack" }, loading());
     $("main").replaceChildren(h("a", { class: "back", href: "/dogadaji" }, "Natrag na događaje"),
       pageHead("Kalendari događaja", "Događaji iz ovih javnih kalendara (Google kalendar, iCal, .ics) automatski se dodaju u Događaje svako jutro. Promjene i otkazivanja u kalendaru prenose se sami.",
-        h("button", { class: "btn", type: "button", onclick: () => calForm() }, "Dodaj kalendar")),
+        h("div", { class: "actions" }, h("a", { class: "btn quiet", href: "/uvoz-dogadaja" }, "Uvezi popis"), h("button", { class: "btn", type: "button", onclick: () => calForm() }, "Dodaj kalendar"))),
       list);
     const rows = await q(sb.from("kalendari").select("*").order("created_at"));
     if (!alive()) return;
@@ -1423,7 +1542,7 @@ function authPage(title, text, fields, submitLabel, run, links = [], google = tr
 /* ------------------------------------------------------------------ */
 /* Usmjeravanje i pokretanje                                           */
 /* ------------------------------------------------------------------ */
-const NAV_OF = { dogadaj: "dogadaji", tema: "forum", oprema: "ocjene", oglas: "oglasi", posao: "poslovi", prijava: "account", registracija: "account", racun: "account", prijave: "account", kalendari: "dogadaji", statistika: "account" };
+const NAV_OF = { dogadaj: "dogadaji", tema: "forum", oprema: "ocjene", oglas: "oglasi", posao: "poslovi", prijava: "account", registracija: "account", racun: "account", prijave: "account", kalendari: "dogadaji", statistika: "account", "uvoz-dogadaja": "dogadaji" };
 
 const TITLE = "BisStage – oglasnik instrumenata, poslovi za glazbenike i forum";
 function setTitle(t) { document.title = t ? `${t} – BisStage` : TITLE; }
