@@ -39,6 +39,7 @@ Tajni ključ (`sb_secret_` ili `service_role`) nikada ne ide u ovaj repozitorij.
 20. Zatim `supabase/19-auto-plakat.sql` (automatski plakat za događaje bez fotografije).
 21. Zatim `supabase/20-statistika.sql` (stranica Statistika za administratora).
 22. Zatim `supabase/21-forum-podkategorije.sql` (podkategorije foruma; ispravak dnevnog ograničenja objava).
+23. Zatim `supabase/22-podkategorije-izmjene.sql` (izmjene podkategorija foruma).
 
 ### Zaštita od botova (Cloudflare Turnstile)
 1. Cloudflare → **Turnstile** → **Add widget**, hostname `bisstage.com`, način **Managed**.

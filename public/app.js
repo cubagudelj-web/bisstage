@@ -12,8 +12,8 @@ const JOBS = ["Svirka", "Stalni angažman", "Studijsko snimanje", "Poduka", "Ben
 const TOPICS = ["Instrumenti", "Bendovi i svirke", "Studio i snimanje", "Učenje i poduka", "Razgovor"];
 const PODKAT = {
   "Instrumenti": ["Gitare i basovi", "Pedale, pojačala i efekti", "Bubnjevi i udaraljke", "Klavijature", "Tamburice", "Gudački i puhački", "Servis i održavanje"],
-  "Bendovi i svirke": ["Traženje članova", "Svadbe i privatne svirke", "Klubovi i nastupi", "Honorari i ugovori", "Ozvučenje i rasvjeta"],
-  "Studio i snimanje": ["Kućni studio", "Mikrofoni i snimanje", "Miks i mastering", "Programi i dodaci (DAW, plugini)", "Objava glazbe i autorska prava"],
+  "Bendovi i svirke": ["Suradnja u bendu", "Svadbe i privatne svirke", "Koncerti i live svirka", "Honorari i ugovori", "Ozvučenje i rasvjeta"],
+  "Studio i snimanje": ["Kućni studio", "Gradnja studija i akustika", "Mikrofoni i snimanje", "Miks i mastering", "Programi i dodaci (DAW, plugini)", "Objava glazbe i autorska prava"],
   "Učenje i poduka": ["Početnici", "Glazbena škola i akademija", "Teorija i harmonija", "Tehnika i vježbanje", "Pjevanje"],
   "Razgovor": ["Koncerti i festivali", "Nova glazba", "Glazbena scena regije", "Opušteno"],
 };
