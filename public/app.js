@@ -77,9 +77,19 @@ const imgUrl = path => sb.storage.from("slike").getPublicUrl(path).data.publicUr
 
 class UserError extends Error {}
 
+// Kratka privremena memorija čitanja: povratak na već otvoreni dio stranice je trenutan.
+// Svaka promjena (objava, uređivanje, brisanje, prijava) briše memoriju.
+const qCache = new Map(), Q_TTL = 60e3;
 async function q(promise) {
+  const get = promise?.method === "GET" && promise.url;
+  const key = get ? String(promise.url) + "|" + (promise.headers?.Prefer || promise.headers?.get?.("Prefer") || "") : null;
+  if (key) {
+    const hit = qCache.get(key);
+    if (hit && Date.now() - hit.t < Q_TTL) return structuredClone(hit.data);
+  } else if (promise?.method) qCache.clear();
   const { data, error } = await promise;
   if (error) throw error;
+  if (key && data != null) { qCache.set(key, { t: Date.now(), data: structuredClone(data) }); if (qCache.size > 200) qCache.delete(qCache.keys().next().value); }
   return data;
 }
 
@@ -865,12 +875,10 @@ const views = {
     };
     $("main").replaceChildren(pageHead("Forum", "Pitanja, savjeti i razgovori među glazbenicima.", h("button", { class: "btn", type: "button", onclick: newTopic }, "Otvori temu")),
       h("div", { class: "tools one" }, search("q-forum", "Pretraži teme", st, "npr. ozvučenje, svadba"), h("span")), chips, subs, list);
-    let qy = sb.from("teme_pregled").select("*").order("created_at", { ascending: false }).limit(LIMIT);
-    if (st.kat) qy = qy.eq("kategorija", st.kat);
-    if (st.kat && st.pod === OPCENITO) qy = qy.is("podkategorija", null);
-    else if (st.kat && st.pod) qy = qy.eq("podkategorija", st.pod);
-    const [rows, all] = await Promise.all([q(qy), st.kat ? q(sb.from("teme").select("podkategorija, created_at").eq("kategorija", st.kat).limit(5000)) : []]);
-    await loadNames(rows.map(r => r.autor));
+    const allRows = await q(sb.from("teme_pregled").select("*").order("created_at", { ascending: false }).limit(LIMIT));
+    await loadNames(allRows.map(r => r.autor));
+    const all = st.kat ? allRows.filter(t => t.kategorija === st.kat) : [];
+    const rows = !st.kat ? allRows : all.filter(t => !st.pod || (st.pod === OPCENITO ? !t.podkategorija : t.podkategorija === st.pod));
     if (!alive()) return;
     const pick = (kat, pod) => () => { st.kat = kat; st.pod = pod; refresh(); };
     chips.replaceChildren(...["", ...TOPICS].map(k => h("button", { class: "chip", type: "button", "aria-pressed": String((st.kat || "") === k), onclick: pick(k, "") }, k || "Sve teme")));
@@ -1505,7 +1513,7 @@ async function boot() {
   sb.auth.onAuthStateChange((event, s) => {
     if (event === "INITIAL_SESSION" || event === "TOKEN_REFRESHED") { session = s; return; }
     setTimeout(async () => {
-      session = s;
+      session = s; qCache.clear();
       await loadMe();
       renderAccount();
       updateReportCount().catch(() => {});
