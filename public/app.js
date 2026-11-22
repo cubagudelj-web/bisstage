@@ -10,6 +10,17 @@ const CONDS = ["Novo", "Kao novo", "Korišteno", "Za popravak"];
 const CURS = { EUR: "€", KM: "KM", RSD: "RSD", MKD: "MKD" };
 const JOBS = ["Svirka", "Stalni angažman", "Studijsko snimanje", "Poduka", "Bend traži člana"];
 const TOPICS = ["Instrumenti", "Bendovi i svirke", "Studio i snimanje", "Učenje i poduka", "Razgovor"];
+const PODKAT = {
+  "Instrumenti": ["Gitare i basovi", "Pedale, pojačala i efekti", "Bubnjevi i udaraljke", "Klavijature", "Tamburice", "Gudački i puhački", "Servis i održavanje"],
+  "Bendovi i svirke": ["Traženje članova", "Svadbe i privatne svirke", "Klubovi i nastupi", "Honorari i ugovori", "Ozvučenje i rasvjeta"],
+  "Studio i snimanje": ["Kućni studio", "Mikrofoni i snimanje", "Miks i mastering", "Programi i dodaci (DAW, plugini)", "Objava glazbe i autorska prava"],
+  "Učenje i poduka": ["Početnici", "Glazbena škola i akademija", "Teorija i harmonija", "Tehnika i vježbanje", "Pjevanje"],
+  "Razgovor": ["Koncerti i festivali", "Nova glazba", "Glazbena scena regije", "Opušteno"],
+};
+const OPCENITO = "Općenito";
+// jedan izbornik za kategoriju i podkategoriju: vrijednost "Kategorija|Podkategorija"
+const TOPIC_OPTIONS = TOPICS.map(k => ({ group: k, options: [[k + "|", k + " › " + OPCENITO], ...PODKAT[k].map(p => [k + "|" + p, k + " › " + p])] }));
+const topicPath = t => t.podkategorija ? `${t.kategorija} › ${t.podkategorija}` : t.kategorija;
 const EVENT_TYPES = ["Koncert", "Festival", "Tečaj ili radionica", "Jam session", "Audicija ili natjecanje", "Sajam opreme", "Ostalo"];
 const MJ = ["sij", "velj", "ožu", "tra", "svi", "lip", "srp", "kol", "ruj", "lis", "stu", "pro"];
 const CRIT = [["zvuk", "Zvuk"], ["izrada", "Izrada"], ["vrijednost", "Vrijednost"]];
@@ -26,7 +37,7 @@ let sb = null;
 let session = null;
 let me = null; // { id, ime, admin }
 let navToken = 0;
-const filters = { dogadaji: { q: "", vrsta: "", drzava: "" }, prijave: { tab: "otvorene" }, mojeObjave: { tab: "oglasi" }, oglasi: { q: "", cat: "", drzava: "" }, poslovi: { q: "", vrsta: "", drzava: "" }, forum: { q: "", kat: "" }, ocjene: { q: "", kat: "" } };
+const filters = { dogadaji: { q: "", vrsta: "", drzava: "" }, prijave: { tab: "otvorene" }, mojeObjave: { tab: "oglasi" }, oglasi: { q: "", cat: "", drzava: "" }, poslovi: { q: "", vrsta: "", drzava: "" }, forum: { q: "", kat: "", pod: "" }, ocjene: { q: "", kat: "" } };
 const open = new Set();
 const nameCache = new Map();
 const avatarCache = new Map();
@@ -164,7 +175,10 @@ function openForm({ title, submit, fields, values = {}, save, done = "Objavljeno
   const control = f => {
     const id = "f-" + f.name, base = { id, name: f.name, required: f.required };
     if (f.options) return h("select", base, f.placeholder != null ? h("option", { value: "" }, f.placeholder) : null,
-      f.options.map(o => { const [v, l] = Array.isArray(o) ? o : [o, o]; return h("option", { value: v, selected: String(values[f.name] ?? "") === String(v) }, l); }));
+      f.options.map(function opt(o) {
+        if (o && o.group) return h("optgroup", { label: o.group }, o.options.map(opt));
+        const [v, l] = Array.isArray(o) ? o : [o, o]; return h("option", { value: v, selected: String(values[f.name] ?? "") === String(v) }, l);
+      }));
     if (f.type === "textarea") return h("textarea", { ...base, maxlength: f.max || 3000, value: values[f.name] || "" });
     if (f.type === "file") return h("input", { id, name: f.name, type: "file", accept: "image/jpeg,image/png,image/webp", multiple: f.multiple !== false });
     return h("input", { ...base, type: f.type || "text", maxlength: f.type === "number" || f.type === "date" ? null : f.max || 120, minlength: f.min_len, min: f.min, step: f.step, value: values[f.name] ?? "" });
@@ -399,7 +413,7 @@ const jobRow = (o, tag = "summary", href) => h(tag, { class: "row" + (featured(o
   h("div", { class: "meta" }, featTag(o), h("span", {}, o.vrsta), h("span", {}, place(o)), o.rok ? h("span", {}, "Rok: " + day(o.rok)) : null, h("span", {}, nameOf(o.autor)), h("span", {}, date(o.created_at))));
 const threadRow = t => h("a", { class: "row", href: "/tema/" + t.id }, h("h3", {}, t.naslov),
   h("div", { class: "value" }, String(t.broj_odgovora ?? 0), h("small", {}, "odg.")),
-  h("div", { class: "meta" }, h("span", {}, t.kategorija), h("span", {}, nameOf(t.autor)), h("span", {}, date(t.created_at))));
+  h("div", { class: "meta" }, h("span", {}, topicPath(t)), h("span", {}, nameOf(t.autor)), h("span", {}, date(t.created_at))));
 const bars = g => h("div", { class: "bars" }, CRIT.map(([k, l]) => h("div", { class: "bar" }, h("span", {}, l),
   h("i", {}, h("b", { vars: { "--w": `${(Number(g[k]) || 0) / 5 * 100}%` } })), h("span", {}, g.broj_ocjena ? dec(g[k]) : "–"))));
 const scoreBox = g => h("div", { class: "score" }, g.broj_ocjena ? dec(g.prosjek) : "–", h("small", {}, plural(g.broj_ocjena || 0, "ocjena", "ocjene", "ocjena")));
@@ -840,22 +854,42 @@ const views = {
   },
 
   async forum(_, alive) {
-    const st = filters.forum, list = h("div", { class: "rows" }, loading()), chips = h("div", { class: "chips" });
+    const st = filters.forum, list = h("div", { class: "rows" }, loading()), chips = h("div", { class: "chips" }), subs = h("div");
     const newTopic = () => {
       if (needLogin()) return;
-      openForm({ title: "Nova tema", submit: "Otvori temu",
-        fields: [{ name: "naslov", label: "Naslov", required: true, max: 120, min_len: 3 }, { name: "kategorija", label: "Kategorija", options: TOPICS, required: true }, { name: "tekst", label: "Tekst", type: "textarea", required: true, max: 5000 }],
-        save: v => q(sb.from("teme").insert({ naslov: v.naslov, kategorija: v.kategorija, tekst: v.tekst })) });
+      openForm({ title: "Nova tema", submit: "Otvori temu", values: { mjesto: st.kat ? st.kat + "|" + (st.pod && st.pod !== OPCENITO ? st.pod : "") : "" },
+        fields: [{ name: "naslov", label: "Naslov", required: true, max: 120, min_len: 3 },
+          { name: "mjesto", label: "Kategorija", options: TOPIC_OPTIONS, placeholder: "Odaberi", required: true },
+          { name: "tekst", label: "Tekst", type: "textarea", required: true, max: 5000 }],
+        save: v => { const [kategorija, pod] = v.mjesto.split("|"); return q(sb.from("teme").insert({ naslov: v.naslov, kategorija, podkategorija: pod || null, tekst: v.tekst })); } });
     };
     $("main").replaceChildren(pageHead("Forum", "Pitanja, savjeti i razgovori među glazbenicima.", h("button", { class: "btn", type: "button", onclick: newTopic }, "Otvori temu")),
-      h("div", { class: "tools one" }, search("q-forum", "Pretraži teme", st, "npr. ozvučenje, svadba"), h("span")), chips, list);
-    const rows = await q(sb.from("teme_pregled").select("*").order("created_at", { ascending: false }).limit(LIMIT));
+      h("div", { class: "tools one" }, search("q-forum", "Pretraži teme", st, "npr. ozvučenje, svadba"), h("span")), chips, subs, list);
+    let qy = sb.from("teme_pregled").select("*").order("created_at", { ascending: false }).limit(LIMIT);
+    if (st.kat) qy = qy.eq("kategorija", st.kat);
+    if (st.kat && st.pod === OPCENITO) qy = qy.is("podkategorija", null);
+    else if (st.kat && st.pod) qy = qy.eq("podkategorija", st.pod);
+    const [rows, all] = await Promise.all([q(qy), st.kat ? q(sb.from("teme").select("podkategorija, created_at").eq("kategorija", st.kat).limit(5000)) : []]);
     await loadNames(rows.map(r => r.autor));
     if (!alive()) return;
+    const pick = (kat, pod) => () => { st.kat = kat; st.pod = pod; refresh(); };
+    chips.replaceChildren(...["", ...TOPICS].map(k => h("button", { class: "chip", type: "button", "aria-pressed": String((st.kat || "") === k), onclick: pick(k, "") }, k || "Sve teme")));
+    if (st.kat) {
+      const stat = {};
+      for (const t of all) { const k = t.podkategorija || OPCENITO; const x = stat[k] ||= { n: 0, zadnja: null }; x.n++; if (!x.zadnja || t.created_at > x.zadnja) x.zadnja = t.created_at; }
+      const item = (pod, label) => {
+        const x = pod ? stat[pod] || { n: 0 } : { n: all.length };
+        return h("li", {}, h("button", { type: "button", class: "subcat" + (x.n ? "" : " empty"), "aria-pressed": String((st.pod || "") === pod), onclick: pick(st.kat, pod) },
+          h("span", { class: "subcat-name" }, label), h("span", { class: "subcat-n" }, plural(x.n, "tema", "teme", "tema")),
+          h("span", { class: "subcat-date" }, x.zadnja ? "zadnja " + date(x.zadnja) : "")));
+      };
+      subs.replaceChildren(h("nav", { class: "subcats", "aria-label": "Podkategorije: " + st.kat }, h("ul", {},
+        item("", "Sve u kategoriji " + st.kat), ...PODKAT[st.kat].map(p => item(p, p)), stat[OPCENITO] ? item(OPCENITO, OPCENITO) : null)));
+    } else subs.replaceChildren();
     redraw = () => {
-      chips.replaceChildren(...["", ...TOPICS].map(k => h("button", { class: "chip", type: "button", "aria-pressed": String(st.kat === k), onclick: () => { st.kat = k; redraw(); } }, k || "Sve teme")));
-      fill(list, rows.filter(t => (!st.kat || t.kategorija === st.kat) && hit(st.q, t.naslov, t.tekst)).map(threadRow),
-        rows.length ? emptyBox("Nema takvih tema", "Promijeni pretragu ili kategoriju, ili otvori novu temu.") : emptyBox("Još nema tema", "Otvori prvu temu."));
+      fill(list, rows.filter(t => hit(st.q, t.naslov, t.tekst)).map(threadRow),
+        rows.length ? emptyBox("Nema takvih tema", "Promijeni pretragu ili kategoriju, ili otvori novu temu.")
+          : emptyBox(st.kat ? "Ovdje još nema tema" : "Još nema tema", "Otvori prvu temu."));
     };
     redraw();
   },
@@ -869,8 +903,19 @@ const views = {
     await loadNames([t.autor, ...rs.map(r => r.autor)]);
     if (!alive()) return;
     setTitle(t.naslov);
-    box.replaceChildren(metaHead(t.naslov, [h("span", {}, t.kategorija), authorLink(t.autor), h("span", {}, date(t.created_at))]),
-      h("article", { class: "post" }, h("p", { class: "prose" }, t.tekst), h("div", { class: "actions" }, delBtn(t, async () => { await q(sb.from("teme").delete().eq("id", t.id)); go("/forum"); }), reportBtn("tema", t, "/tema/" + t.id, t.naslov))));
+    const toCat = (kat, pod) => () => { filters.forum.kat = kat; filters.forum.pod = pod; go("/forum"); };
+    const move = () => openForm({ title: "Premjesti temu", submit: "Premjesti", done: "Tema je premještena",
+      values: { mjesto: t.kategorija + "|" + (t.podkategorija || "") },
+      fields: [{ name: "mjesto", label: "Kategorija", options: TOPIC_OPTIONS, required: true }],
+      save: async v => { const [k, pd] = v.mjesto.split("|"); await q(sb.rpc("premjesti_temu", { p_id: t.id, p_kategorija: k, p_podkategorija: pd || "" })); } });
+    const canMove = session && (t.autor === uid() || me?.admin);
+    box.replaceChildren(metaHead(t.naslov, [
+        h("span", {}, h("a", { href: "/forum", onclick: e => { e.preventDefault(); toCat(t.kategorija, "")(); } }, t.kategorija),
+          t.podkategorija ? [" › ", h("a", { href: "/forum", onclick: e => { e.preventDefault(); toCat(t.kategorija, t.podkategorija)(); } }, t.podkategorija)] : null),
+        authorLink(t.autor), h("span", {}, date(t.created_at))]),
+      h("article", { class: "post" }, h("p", { class: "prose" }, t.tekst), h("div", { class: "actions" },
+        canMove ? h("button", { class: "btn small quiet", type: "button", onclick: move }, "Premjesti") : null,
+        delBtn(t, async () => { await q(sb.from("teme").delete().eq("id", t.id)); go("/forum"); }), reportBtn("tema", t, "/tema/" + t.id, t.naslov))));
     let form;
     if (session) {
       const ta = h("textarea", { id: "reply-text", required: true, maxlength: 3000 });

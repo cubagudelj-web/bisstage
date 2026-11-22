@@ -49,7 +49,7 @@ declare
   v_novi boolean; v_granica int; v_broj int;
 begin
   if public.je_admin() then return new; end if;
-  if tg_table_name = 'dogadaji' and new.kalendar is not null then return new; end if;
+  if to_jsonb(new) ->> 'kalendar' is not null then return new; end if;
   select created_at > now() - interval '7 days' into v_novi from public.profili where id = new.autor;
   v_granica := case when coalesce(v_novi, true) then tg_argv[0]::int else tg_argv[1]::int end;
   execute format('select count(*) from public.%I where autor = $1 and created_at > now() - interval ''24 hours''', tg_table_name)
