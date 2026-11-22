@@ -1642,6 +1642,16 @@ async function boot() {
   });
   addEventListener("popstate", () => route());
   let installEvt = null;
+  // Gumb "Natrag na vrh": pojavi se kad se stranica spusti više od dva zaslona.
+  const top = h("button", { class: "to-top", type: "button", "aria-label": "Natrag na vrh", title: "Natrag na vrh", hidden: true,
+    onclick: () => scrollTo({ top: 0, behavior: matchMedia("(prefers-reduced-motion: reduce)").matches ? "auto" : "smooth" }) });
+  top.innerHTML = '<svg viewBox="0 0 24 24" width="24" height="24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 19V5M5 12l7-7 7 7"/></svg>';
+  document.body.append(top);
+  let topTick = false;
+  addEventListener("scroll", () => {
+    if (topTick) return; topTick = true;
+    requestAnimationFrame(() => { top.hidden = scrollY < innerHeight * 2; topTick = false; });
+  }, { passive: true });
   addEventListener("beforeinstallprompt", e => {
     e.preventDefault(); installEvt = e;
     const b = $("install"); if (b) b.hidden = false;
