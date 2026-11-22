@@ -151,9 +151,9 @@ dialog.lightbox::backdrop { background: rgba(5, 6, 18, .88); }
 .video-play { width: 64px; height: 64px; border-radius: 50%; background: var(--note); color: var(--note-fg); display: grid; place-items: center; font-size: 1.6rem; padding-left: 4px; }
 .video-start:hover .video-play { transform: scale(1.06); }
 .video-wrap a { font-size: .9rem; }
-.gear-img { grid-column: 1 / -1; width: 100%; aspect-ratio: 4 / 3; object-fit: cover; border-radius: 6px; background: var(--accent-soft); margin-bottom: 8px; }
+.gear-img { grid-column: 1 / -1; width: 100%; aspect-ratio: 4 / 3; object-fit: contain; border-radius: 6px; background: var(--bg); border: 1px solid var(--rule); margin-bottom: 8px; }
 .gear-hero { max-width: 520px; }
-.gear-hero img { width: 100%; aspect-ratio: 4 / 3; object-fit: cover; border-radius: 8px; display: block; }
+.gear-hero img { width: 100%; aspect-ratio: 4 / 3; object-fit: contain; border-radius: 8px; display: block; background: var(--surface); border: 1px solid var(--rule); }
 .avatar { display: inline-grid; place-items: center; flex: none; border-radius: 50%; object-fit: cover; background: var(--accent-soft); vertical-align: middle; }
 .avatar.initial { background: hsl(var(--hue) 55% 88%); color: hsl(var(--hue) 50% 28%); font: 700 .7em/1 var(--display); }
 .avatar.sm { width: 1.5em; height: 1.5em; font-size: .85em; margin-right: .35em; }
