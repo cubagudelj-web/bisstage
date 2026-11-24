@@ -428,3 +428,5 @@ dialog { border-radius: 22px; }
 main.wrap { padding-top: 28px; }
 #hero > .wrap { margin-top: 28px; }
 .home .gear-img { max-height: 220px; }
+/* kartice na dnu fotografije, preko tamne publike, da se bend vidi */
+.hero-cards { justify-content: flex-end; }
