@@ -46,6 +46,12 @@ const avatarCache = new Map();
 /* Pomoćne funkcije                                                    */
 /* ------------------------------------------------------------------ */
 const $ = id => document.getElementById(id);
+// Mala ikona (fiksni SVG, bez korisničkog sadržaja)
+function svgIcon(paths) {
+  const s = document.createElement("span"); s.className = "ico"; s.setAttribute("aria-hidden", "true");
+  s.innerHTML = `<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">${paths}</svg>`;
+  return s;
+}
 function h(tag, props, ...kids) {
   const e = document.createElement(tag);
   for (const [k, v] of Object.entries(props || {})) {
@@ -779,15 +785,30 @@ let redraw = () => {};
 
 const views = {
   async pocetna(_, alive) {
-    const door = (href, label, y, stem, cls, key) => h("a", { class: "door " + cls, href: "/" + href, vars: { "--y": y, "--stem": stem } },
-      cls.includes("low") ? h("span", { class: "ledger" }) : null, h("span", { class: "stem" }), h("span", { class: "head" }, h("span", { "data-c": key }, "–")), h("span", { class: "label" }, label));
-    const fx = h("canvas", { class: "band-fx", "aria-hidden": "true" });
-    $("hero").replaceChildren(h("section", { class: "band" }, fx, h("div", { class: "wrap" },
-      h("div", {}, h("h1", {}, "BisStage"), h("p", { class: "lead" }, "Kupi i prodaj instrumente, nađi svirku, pitaj kolege, ocijeni opremu i saznaj gdje se svira. Za glazbenike iz Hrvatske i regije.")),
-      h("nav", { class: "staff", "aria-label": "Dijelovi stranice" },
-        door("oglasi", "Oglasnik", 5.5, 2.5, "low", "oglasi"), door("poslovi", "Burza poslova", 4.5, 1.5, "", "poslovi"),
-        door("forum", "Forum", 3.5, .5, "", "teme"), door("ocjene", "Ocjene opreme", 2, 2, "down", "oprema"), door("dogadaji", "Događaji", 1, 1, "down", "dogadaji")))));
-    bandFx(fx);
+    const q0 = h("input", { id: "hero-q", type: "search", placeholder: "Pretraži oglase: Fender, pianino, Split…", autocomplete: "off" });
+    const cards = h("div", { class: "hero-cards" });
+    const secCard = (href, naziv, opis, key) => h("a", { class: "sec-card", href: "/" + href }, h("b", {}, naziv), h("small", {}, opis), h("i", { "data-c": key }, "Otvori →"));
+    $("hero").replaceChildren(
+      h("section", { class: "hero" },
+        h("div", { class: "hero-text" },
+          h("span", { class: "hero-pill" }, "Zajednica glazbenika regije"),
+          h("h1", {}, "Sviraš? Ovo je tvoja ", h("span", {}, "pozornica.")),
+          h("p", { class: "lead" }, "Kupi i prodaj opremu, nađi svirku, pitaj kolege i saznaj gdje se svira. Besplatno, za Hrvatsku i cijelu regiju."),
+          h("div", { class: "actions" },
+            h("button", { class: "btn", type: "button", onclick: () => { if (!needLogin()) oglasForm(); } }, "Objavi oglas"),
+            h("a", { class: "btn quiet", href: "/oglasi" }, "Pregledaj oglase")),
+          h("form", { class: "hero-search", role: "search", onsubmit: e => { e.preventDefault(); filters.oglasi.q = q0.value.trim(); go("/oglasi"); } },
+            h("label", { for: "hero-q", class: "sr-only" }, "Pretraži oglase"),
+            svgIcon('<circle cx="11" cy="11" r="7"/><path d="M20 20l-3.5-3.5"/>'), q0, h("button", { class: "btn", type: "submit" }, "Traži"))),
+        h("div", { class: "hero-photo" },
+          h("img", { src: "/img/naslovnica.jpg", srcset: "/img/naslovnica-640.jpg 640w, /img/naslovnica.jpg 1200w", sizes: "(max-width: 720px) 100vw, 560px",
+            alt: "Publika s podignutim rukama pred bendom na pozornici", width: 1200, height: 675, fetchpriority: "high" }), cards)),
+      h("div", { class: "wrap" }, h("nav", { class: "sections", "aria-label": "Dijelovi stranice" },
+        secCard("oglasi", "Oglasnik", "Instrumenti, pojačala i oprema iz ruke u ruku.", "oglasi"),
+        secCard("poslovi", "Burza poslova", "Svirke, bendovi, zamjene i poduka.", "poslovi"),
+        secCard("forum", "Forum", "Pitanja i savjeti među glazbenicima.", "teme"),
+        secCard("ocjene", "Ocjene opreme", "Iskustva glazbenika prije kupnje.", "oprema"),
+        secCard("dogadaji", "Događaji", "Koncerti, festivali i radionice.", "dogadaji"))));
     const box = (title, href, cls = "rows") => { const list = h("div", { class: cls }, loading()); return [list, h("section", {}, h("h2", {}, title, h("a", { href: "/" + href }, "Sve")), list)]; };
     const [a, as] = box("Novi oglasi", "oglasi"), [j, js] = box("Novi poslovi", "poslovi"), [t, ts] = box("Na forumu", "forum"), [g, gs] = box("Najbolje ocijenjeno", "ocjene", "stack");
     const featList = h("div", { class: "feat-grid" });
@@ -808,11 +829,19 @@ const views = {
     const ev = counts.pop();
     await loadNames([...og, ...po, ...te, ...ft].map(x => x.autor));
     if (!alive()) return;
-    ["oglasi", "poslovi", "teme", "oprema"].forEach((k, i) => { const el = document.querySelector(`[data-c="${k}"]`); if (el) el.textContent = counts[i]; });
+    const forms = { oglasi: ["oglas", "oglasa", "oglasa"], poslovi: ["posao", "posla", "poslova"], teme: ["tema", "teme", "tema"], oprema: ["model", "modela", "modela"] };
+    ["oglasi", "poslovi", "teme", "oprema"].forEach((k, i) => { const el = document.querySelector(`[data-c="${k}"]`); if (el && typeof counts[i] === "number") el.textContent = plural(counts[i], ...forms[k]) + " →"; });
+    // kartice preko fotografije: sljedeći događaj, najnoviji oglas, najnoviji posao
+    const hc = (cls, href, label, text) => h("a", { class: "hero-card " + cls, href }, h("span", {}, label), h("em", {}, text));
+    const e0 = ev[0], o0 = ft[0] || og[0], p0 = po[0];
+    cards.replaceChildren(...[
+      e0 ? hc("hc-event", "/dogadaj/" + e0.id, new Date(e0.pocetak).toLocaleDateString("hr-HR", { day: "numeric", month: "numeric" }), e0.naziv + (e0.grad ? " · " + e0.grad : "")) : null,
+      o0 ? hc("hc-ad", "/oglas/" + o0.id, price(o0), o0.naslov + (o0.grad ? ", " + o0.grad : "")) : null,
+      p0 ? hc("hc-job", "/posao/" + p0.id, "Posao", p0.naslov) : null].filter(Boolean));
     featSec.hidden = !ft.length;
     evSec.hidden = !ev.length;
     evList.replaceChildren(...ev.map(eventRow));
-    const dc = document.querySelector('[data-c="dogadaji"]'); if (dc) dc.textContent = ev.length >= 4 ? "4+" : ev.length;
+    const dc = document.querySelector('[data-c="dogadaji"]'); if (dc && ev.length) dc.textContent = (ev.length >= 4 ? "4+ nadolazeća" : plural(ev.length, "nadolazeći", "nadolazeća", "nadolazećih")) + " →";
     featList.replaceChildren(...ft.map(o => h("a", { class: "feat-card", href: "/oglas/" + o.id },
       o.slike?.length ? h("img", { src: imgUrl(o.slike[0]), alt: "", loading: "lazy" }) : h("span", { class: "feat-ph", "aria-hidden": "true" }, "♪"),
       h("span", { class: "tag feat" }, "Istaknuto"), h("strong", {}, o.naslov), h("span", { class: "value" }, price(o)), h("span", { class: "meta" }, place(o)))));
@@ -1638,6 +1667,7 @@ async function route(keepScroll) {
   if (!keepScroll) open.clear(); // prelaskom na drugi dio stranice otvoreni oglasi se zatvaraju
   setTitle(null);
   if (name !== "pocetna") $("hero").replaceChildren();
+  $("top").classList.remove("open"); $("menu-btn").setAttribute("aria-expanded", "false");
   const navName = NAV_OF[name] || name;
   document.querySelectorAll("#nav a").forEach(a => a.getAttribute("href") === "/" + navName ? a.setAttribute("aria-current", "page") : a.removeAttribute("aria-current"));
   navName === "account" ? $("account").setAttribute("aria-current", "page") : $("account").removeAttribute("aria-current");
@@ -1674,6 +1704,7 @@ async function updateReportCount() {
 }
 function renderAccount() {
   const a = $("account");
+  a.classList.toggle("login", !session);
   if (session) { a.replaceChildren(me ? avatar(me.id) : "", (me?.ime || "Moj račun") + (reportCount ? " · " + plural(reportCount, "prijava", "prijave", "prijava") : "")); a.href = reportCount ? "/prijave" : "/racun"; }
   else { a.textContent = "Prijava"; a.href = "/prijava"; }
 }
@@ -1708,6 +1739,8 @@ async function boot() {
   });
   addEventListener("popstate", () => route());
   let installEvt = null;
+  // Izbornik na mobitelu
+  $("menu-btn").onclick = () => { const o = $("top").classList.toggle("open"); $("menu-btn").setAttribute("aria-expanded", String(o)); };
   // Gumb "Natrag na vrh": pojavi se kad se stranica spusti više od dva zaslona.
   const top = h("button", { class: "to-top", type: "button", "aria-label": "Natrag na vrh", title: "Natrag na vrh", hidden: true,
     onclick: () => scrollTo({ top: 0, behavior: matchMedia("(prefers-reduced-motion: reduce)").matches ? "auto" : "smooth" }) });
