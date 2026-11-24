@@ -5,9 +5,9 @@
 /* ------------------------------------------------------------------ */
 const CFG = window.BISSTAGE || {};
 const COUNTRIES = ["Hrvatska", "Slovenija", "Bosna i Hercegovina", "Srbija", "Crna Gora", "Sjeverna Makedonija"];
-const CATS = ["Gitare i basovi", "Gitarske pedale i pojačala", "Bubnjevi i udaraljke", "Klavijature", "Gudački", "Puhački", "Tamburice", "Ozvučenje", "Studijska oprema"];
-// Kategorije u ocjenama opreme (detaljnije od oglasnika).
-const GEAR_CATS = ["Gitare", "Bas gitare", "Gitarske pedale", "Gitarska pojačala", "Bubnjevi i udaraljke", "Klavijature", "Gudački", "Puhački", "Tamburice", "Ozvučenje", "Studijska oprema"];
+// Iste kategorije u Oglasniku i Ocjenama opreme.
+const CATS = ["Gitare", "Bas gitare", "Gitarske pedale", "Gitarska pojačala", "Bubnjevi i udaraljke", "Klavijature", "Harmonike", "Gudački", "Puhački", "Tamburice", "Mikrofoni", "Ozvučenje", "Studijska oprema"];
+const GEAR_CATS = CATS;
 const BAS_RE = /(bass|\bbas\b|stingray|thunderbird|trbx|\bbb\s?\d{3}|\bsr\s?\d{3})/i;
 const AMP_RE = /(poja[cč]al|\bamp\b|amplifier|combo|katana|spark|\bmg\s?\d|\bhb-10|\bhead\b|blues junior|hot rod|deluxe reverb|twin reverb|\bac\s?\d{1,2}\b|\bdsl\s?\d|\bjcm|mustang|champion|\bcube\b|rumble|frontman|blackstar|orange|laney|bugera|peavey|mesa|engl|ampeg|tone master|nextone|\bthr\s?\d)/i;
 // Stari nazivi kategorija (npr. u starim popisima za uvoz) -> nova kategorija prema nazivu modela.
@@ -309,7 +309,7 @@ async function oglasForm(existing) {
   } catch { gear = gearOpts = null; }
   openForm({
     title: existing ? "Uredi oglas" : "Novi oglas", submit: existing ? "Spremi promjene" : "Objavi oglas",
-    done: existing ? "Spremljeno" : "Objavljeno", values: existing ? { ...existing, oprema: opremaVal, video: existing.video ? "https://youtu.be/" + existing.video : "" } : { valuta: "EUR" }, fields: oglasFields(!!existing, gearOpts).filter(Boolean),
+    done: existing ? "Spremljeno" : "Objavljeno", values: existing ? { ...existing, kategorija: gearCat(existing.kategorija, existing.naslov), oprema: opremaVal, video: existing.video ? "https://youtu.be/" + existing.video : "" } : { valuta: "EUR" }, fields: oglasFields(!!existing, gearOpts).filter(Boolean),
     save: async (v, files) => {
       const id = existing?.id || crypto.randomUUID();
       const row = { naslov: v.naslov, kategorija: v.kategorija, stanje: v.stanje, cijena: v.cijena === "" ? null : Number(v.cijena),
@@ -993,7 +993,7 @@ const views = {
     } }, "🔔 Javi mi kad se pojavi novi oglas za ovu pretragu");
     const saveRow = h("div", { class: "save-search" }, saveSearch);
     list.before(saveRow);
-    const drawList = () => fill(list, rows.filter(o => (!st.cat || o.kategorija === st.cat) && (!st.drzava || o.drzava === st.drzava) && hit(st.q, o.naslov, o.opis, o.grad))
+    const drawList = () => fill(list, rows.filter(o => (!st.cat || gearCat(o.kategorija, o.naslov) === st.cat) && (!st.drzava || o.drzava === st.drzava) && hit(st.q, o.naslov, o.opis, o.grad))
       .map(o => expander("o" + o.id, adRow(o), adBody(o))), rows.length ? emptyBox("Nema takvih oglasa", "Promijeni pretragu ili filtre.") : emptyBox("Još nema oglasa", "Objavi prvi oglas."));
     redraw = () => { saveRow.hidden = !(st.q.trim() || st.cat || st.drzava); drawList(); };
     redraw();
