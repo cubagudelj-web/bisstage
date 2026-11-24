@@ -6,6 +6,13 @@
 const CFG = window.BISSTAGE || {};
 const COUNTRIES = ["Hrvatska", "Slovenija", "Bosna i Hercegovina", "Srbija", "Crna Gora", "Sjeverna Makedonija"];
 const CATS = ["Gitare i basovi", "Gitarske pedale i pojačala", "Bubnjevi i udaraljke", "Klavijature", "Gudački", "Puhački", "Tamburice", "Ozvučenje", "Studijska oprema"];
+// Kategorije u ocjenama opreme (detaljnije od oglasnika).
+const GEAR_CATS = ["Gitare", "Bas gitare", "Gitarske pedale", "Gitarska pojačala", "Bubnjevi i udaraljke", "Klavijature", "Gudački", "Puhački", "Tamburice", "Ozvučenje", "Studijska oprema"];
+const BAS_RE = /(bass|\bbas\b|stingray|thunderbird|trbx|\bbb\s?\d{3}|\bsr\s?\d{3})/i;
+const AMP_RE = /(poja[cč]al|\bamp\b|amplifier|combo|katana|spark|\bmg\s?\d|\bhb-10|\bhead\b|blues junior|hot rod|deluxe reverb|twin reverb|\bac\s?\d{1,2}\b|\bdsl\s?\d|\bjcm|mustang|champion|\bcube\b|rumble|frontman|blackstar|orange|laney|bugera|peavey|mesa|engl|ampeg|tone master|nextone|\bthr\s?\d)/i;
+// Stari nazivi kategorija (npr. u starim popisima za uvoz) -> nova kategorija prema nazivu modela.
+const gearCat = (kat, naziv) => kat === "Gitare i basovi" ? (BAS_RE.test(naziv) ? "Bas gitare" : "Gitare")
+  : kat === "Gitarske pedale i pojačala" ? (AMP_RE.test(naziv) ? "Gitarska pojačala" : "Gitarske pedale") : kat;
 const CONDS = ["Novo", "Kao novo", "Korišteno", "Za popravak"];
 const CURS = { EUR: "€", KM: "KM", RSD: "RSD", MKD: "MKD" };
 const JOBS = ["Svirka", "Stalni angažman", "Studijsko snimanje", "Poduka", "Bend traži člana"];
@@ -1038,7 +1045,7 @@ const views = {
     const add = () => {
       if (needLogin()) return;
       openForm({ title: "Nova oprema", submit: "Dodaj opremu", done: "Dodano",
-        fields: [{ name: "naziv", label: "Proizvođač i model", required: true, max: 90, min_len: 2 }, { name: "kategorija", label: "Kategorija", options: CATS, required: true },
+        fields: [{ name: "naziv", label: "Proizvođač i model", required: true, max: 90, min_len: 2 }, { name: "kategorija", label: "Kategorija", options: GEAR_CATS, required: true },
           { name: "slika", label: "Fotografija (nije obavezno)", type: "file", multiple: false, hint: "Tvoja fotografija ovog modela. Ne koristi tuđe slike s interneta." }],
         save: async (v, files) => {
           const id = crypto.randomUUID();
@@ -1051,11 +1058,11 @@ const views = {
       pageHead("Ocjene opreme", "Svaki model ocjenjuje se od 1 do 5 za zvuk, izradu i vrijednost za novac.", h("div", { class: "actions" },
         me?.admin ? h("a", { class: "btn quiet", href: "/uvoz-opreme" }, "Uvezi popis") : null,
         h("button", { class: "btn", type: "button", onclick: add }, "Dodaj opremu"))),
-      h("div", { class: "tools one" }, search("q-ocjene", "Pretraži", st, "npr. pojačalo"), pick("k-ocjene", "Kategorija", st, "kat", CATS)),
+      h("div", { class: "tools one" }, search("q-ocjene", "Pretraži", st, "npr. pojačalo"), pick("k-ocjene", "Kategorija", st, "kat", GEAR_CATS)),
       list);
     const rows = await q(sb.from("oprema_pregled").select("*").order("broj_ocjena", { ascending: false }).order("prosjek", { ascending: false, nullsFirst: false }).limit(LIMIT));
     if (!alive()) return;
-    redraw = () => fill(list, rows.filter(g => (!st.kat || g.kategorija === st.kat) && hit(st.q, g.naziv)).map(gearCard),
+    redraw = () => fill(list, rows.filter(g => (!st.kat || gearCat(g.kategorija, g.naziv) === st.kat) && hit(st.q, g.naziv)).map(gearCard),
       rows.length ? emptyBox("Nema takve opreme", "Promijeni pretragu ili dodaj model.") : emptyBox("Još nema opreme", "Dodaj prvi model."));
     redraw();
   },
@@ -1093,6 +1100,9 @@ const views = {
             await q(sb.from("oprema").update({ slika: path }).eq("id", g.id));
             await removeSlike(g.slika ? [g.slika] : []);
           } }) }, g.slika ? "Promijeni fotografiju" : "Dodaj fotografiju") : null,
+        canEdit(g) || me?.admin ? h("button", { class: "btn small quiet", type: "button", onclick: () => openForm({ title: "Promijeni kategoriju", submit: "Spremi", done: "Kategorija je promijenjena",
+          values: { kategorija: GEAR_CATS.includes(g.kategorija) ? g.kategorija : "" }, fields: [{ name: "kategorija", label: "Kategorija", options: GEAR_CATS, required: true }],
+          save: v => q(sb.from("oprema").update({ kategorija: v.kategorija }).eq("id", g.id)) }) }, "Promijeni kategoriju") : null,
         delBtn(g, async () => { await removeSlike(g.slika ? [g.slika] : []); await q(sb.from("oprema").delete().eq("id", g.id)); go("/ocjene"); }), reportBtn("oprema", g, "/oprema/" + g.id, g.naziv))));
     list.replaceChildren(h("h2", {}, "Iskustva korisnika"),
       ...(rs.length ? rs.map(r => h("article", { class: "post" },
@@ -1200,10 +1210,10 @@ const views = {
   async "uvoz-opreme"(_, alive) {
     if (!me?.admin) { go("/"); return; }
     const norm = t => String(t || "").trim().toLowerCase().replace(/ž/g, "z").replace(/[čć]/g, "c").replace(/š/g, "s").replace(/đ/g, "d").replace(/\s+/g, " ");
-    const katOf = Object.fromEntries(CATS.map(c => [norm(c), c]));
+    const katOf = Object.fromEntries([...GEAR_CATS, "Gitare i basovi", "Gitarske pedale i pojačala"].map(c => [norm(c), c]));
     const ta = h("textarea", { id: "uvoz-oprema", rows: 12, spellcheck: "false",
       placeholder: "Klavijature;Yamaha P-45\nStudijska oprema;Focusrite Scarlett 2i2 4th Gen\n\nMože i cijela tablica kopirana iz dokumenta (Kategorija, Model, Vrsta)." });
-    const zadana = h("select", { id: "uvoz-oprema-kat" }, h("option", { value: "" }, "Nema (svaki red ima kategoriju)"), CATS.map(c => h("option", { value: c }, c)));
+    const zadana = h("select", { id: "uvoz-oprema-kat" }, h("option", { value: "" }, "Nema (svaki red ima kategoriju)"), GEAR_CATS.map(c => h("option", { value: c }, c)));
     const out = h("div", { class: "stack" });
     let rows = [];
     const preview = async () => {
@@ -1216,6 +1226,7 @@ const views = {
         let kat = katOf[norm(cells[0])], naziv = kat ? cells[1] : cells[0];
         if (!kat) kat = zadana.value || null;
         naziv = (naziv || "").replace(/\s+/g, " ").trim();
+        kat = kat && gearCat(kat, naziv);
         const greske = [];
         if (!kat) greske.push("nepoznata kategorija");
         if (naziv.length < 2 || naziv.length > 90) greske.push("naziv mora imati 2–90 znakova");
