@@ -469,3 +469,11 @@ a.row:hover, summary.row:hover { background: var(--accent-soft); }
 .socs { display: inline-flex; gap: 10px; align-items: center; }
 .foot-links a.soc { color: var(--accent); display: inline-flex; padding: 2px; }
 .foot-links a.soc:hover { opacity: .75; }
+
+/* Oglas -> ocjene modela */
+.gear-link { display: flex; align-items: center; gap: 14px; margin: 4px 0 8px; padding: 12px 16px; border-radius: var(--r-sm, 12px); background: var(--accent-soft); color: var(--fg); text-decoration: none; border: 1px solid transparent; }
+.gear-link:hover { border-color: var(--accent); }
+.gear-link-score { flex: none; font-weight: 800; font-size: 1.05rem; color: var(--accent); white-space: nowrap; }
+.gear-link-text { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
+.gear-link-text small { color: var(--muted); }
+.gear-link-arrow { margin-left: auto; color: var(--accent); font-weight: 700; }

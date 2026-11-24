@@ -34,7 +34,7 @@ const CRIT = [["zvuk", "Zvuk"], ["izrada", "Izrada"], ["vrijednost", "Vrijednost
 const MAX_SLIKA = 7;
 const LIMIT = 300;
 
-const OGLAS_JAVNO = "id,autor,naslov,kategorija,stanje,cijena,valuta,grad,drzava,opis,slike,video,prodano,istjece,istaknut_od,istaknut_do,created_at";
+let OGLAS_JAVNO = "id,autor,naslov,kategorija,stanje,cijena,valuta,grad,drzava,opis,slike,video,prodano,istjece,istaknut_od,istaknut_do,created_at";
 const POSAO_JAVNO = "id,autor,naslov,vrsta,honorar,grad,drzava,rok,opis,istaknut_od,istaknut_do,created_at";
 
 /* ------------------------------------------------------------------ */
@@ -285,9 +285,10 @@ function videoBox(id, title) {
   return h("div", { class: "video-wrap" }, box, h("a", { href: `https://www.youtube.com/watch?v=${id}`, target: "_blank", rel: "noopener" }, "Otvori na YouTubeu"));
 }
 
-const oglasFields = edit => [
+const oglasFields = (edit, gearOpts) => [
   { name: "naslov", label: "Što prodaješ", required: true, max: 90, min_len: 3 },
   [{ name: "kategorija", label: "Kategorija", options: CATS, required: true }, { name: "stanje", label: "Stanje", options: CONDS, required: true }],
+  gearOpts ? { name: "oprema", label: "Model u ocjenama opreme", options: gearOpts, hint: "Kupci će uz oglas vidjeti ocjene korisnika za ovaj model." } : null,
   [{ name: "cijena", label: "Cijena", type: "number", min: 0, step: "any", hint: "Ostavi prazno za dogovor." }, { name: "valuta", label: "Valuta", options: Object.keys(CURS).map(k => [k, CURS[k]]) }],
   [{ name: "grad", label: "Grad", required: true, max: 60 }, { name: "drzava", label: "Država", options: COUNTRIES, required: true }],
   { name: "opis", label: "Opis", type: "textarea", required: true },
@@ -295,15 +296,25 @@ const oglasFields = edit => [
   { name: "video", label: "YouTube video (nije obavezno)", type: "url", max: 200, hint: "Zalijepi poveznicu s YouTubea, npr. snimku u kojoj se instrument svira." },
   { name: "slike", label: `Fotografije (najviše ${MAX_SLIKA})`, type: "file", hint: edit ? "Ako odabereš nove, zamijenit će postojeće." : "JPG, PNG ili WebP. Smanjit ćemo ih prije slanja." },
 ];
-function oglasForm(existing) {
+async function oglasForm(existing) {
   if (needLogin()) return;
+  let gear = null, gearOpts = null, opremaVal = "";
+  try {
+    if (await hasGearLink()) {
+      gear = await q(sb.from("oprema").select("id,naziv,kategorija").order("naziv").limit(3000));
+      gearOpts = [["", "Automatski prema naslovu"], ["ne", "Ne povezuj"],
+        ...GEAR_CATS.map(k => ({ group: k, options: gear.filter(g => gearCat(g.kategorija, g.naziv) === k).map(g => [g.id, g.naziv]) })).filter(x => x.options.length)];
+      if (existing) { const [r] = await q(sb.from("oglasi").select("oprema").eq("id", existing.id).limit(1)); opremaVal = r?.oprema || ""; }
+    }
+  } catch { gear = gearOpts = null; }
   openForm({
     title: existing ? "Uredi oglas" : "Novi oglas", submit: existing ? "Spremi promjene" : "Objavi oglas",
-    done: existing ? "Spremljeno" : "Objavljeno", values: existing ? { ...existing, video: existing.video ? "https://youtu.be/" + existing.video : "" } : { valuta: "EUR" }, fields: oglasFields(!!existing),
+    done: existing ? "Spremljeno" : "Objavljeno", values: existing ? { ...existing, oprema: opremaVal, video: existing.video ? "https://youtu.be/" + existing.video : "" } : { valuta: "EUR" }, fields: oglasFields(!!existing, gearOpts).filter(Boolean),
     save: async (v, files) => {
       const id = existing?.id || crypto.randomUUID();
       const row = { naslov: v.naslov, kategorija: v.kategorija, stanje: v.stanje, cijena: v.cijena === "" ? null : Number(v.cijena),
         valuta: v.valuta || "EUR", grad: v.grad, drzava: v.drzava, opis: v.opis, kontakt: v.kontakt, video: ytId(v.video) };
+      if (gear) row.oprema = v.oprema === "ne" ? null : v.oprema || matchGear(v.naslov, gear)?.id || null;
       let old = null;
       if (files.length) { row.slike = await uploadSlike(id, files); old = existing?.slike; }
       if (existing) await q(sb.from("oglasi").update(row).eq("id", id));
@@ -443,6 +454,48 @@ const scoreBox = g => h("div", { class: "score" }, g.broj_ocjena ? dec(g.prosjek
 const gearCard = g => h("a", { class: "gear-card", href: "/oprema/" + g.id }, g.slika ? h("img", { class: "gear-img", src: imgUrl(g.slika), alt: "", loading: "lazy" }) : null, scoreBox(g), h("h3", {}, g.naziv), h("div", { class: "meta" }, h("span", {}, g.kategorija)), bars(g));
 const fill = (el, items, emptyEl) => el.replaceChildren(...(items.length ? items : [emptyEl]));
 
+/* Povezivanje oglasa s ocjenama opreme (stupac oglasi.oprema, SQL 24). */
+let gearLinkOK = null;
+async function hasGearLink() {
+  if (gearLinkOK === null) {
+    gearLinkOK = sb.from("oglasi").select("oprema").limit(1).then(({ error }) => !error, () => false);
+  }
+  return gearLinkOK;
+}
+const rijeci = t => norm(t).replace(/[^0-9a-z]+/g, " ").trim().split(" ").filter(Boolean);
+function matchGear(naslov, list) {
+  const w = new Set(rijeci(naslov)); let best = null, bn = 0;
+  for (const g of list) {
+    const r = rijeci(g.naziv);
+    if (r.length >= 2 && r.every(x => w.has(x)) && (r.length > bn || (r.length === bn && g.naziv.length > best.naziv.length))) { best = g; bn = r.length; }
+  }
+  return best;
+}
+function gearLink(o) {
+  const box = h("div", { class: "gear-link-wrap" });
+  const run = async () => {
+    try {
+      if (!(await hasGearLink())) return;
+      let id = o.oprema;
+      if (id === undefined) { const [r] = await q(sb.from("oglasi").select("oprema").eq("id", o.id).limit(1)); id = r?.oprema; }
+      if (!id) return;
+      const [g] = await q(sb.from("oprema_pregled").select("id,naziv,broj_ocjena,prosjek").eq("id", id).limit(1));
+      if (!g) return;
+      box.replaceChildren(h("a", { class: "gear-link", href: "/oprema/" + g.id },
+        h("span", { class: "gear-link-score", "aria-hidden": "true" }, g.broj_ocjena ? "★ " + dec(g.prosjek) : "★"),
+        h("span", { class: "gear-link-text" }, h("b", {}, g.naziv),
+          h("small", {}, g.broj_ocjena ? `Prosječna ocjena korisnika (${plural(g.broj_ocjena, "ocjena", "ocjene", "ocjena")}). Pročitaj iskustva.` : "Još nema ocjena. Imaš ovaj model? Ocijeni ga.")),
+        h("span", { class: "gear-link-arrow", "aria-hidden": "true" }, "→")));
+    } catch { /* bez poveznice */ }
+  };
+  // Na popisu se podaci dohvaćaju tek kad se oglas otvori.
+  setTimeout(() => {
+    const d = box.closest("details");
+    if (d && !d.open) d.addEventListener("toggle", run, { once: true }); else run();
+  });
+  return box;
+}
+
 function adBody(o) {
   // Na računalu je video mala pločica na kraju galerije; klikom se otvara u punoj veličini. Na mobitelu je odmah velik.
   const vid = o.video ? videoBox(o.video, o.naslov) : null;
@@ -457,7 +510,7 @@ function adBody(o) {
       h("img", { src: imgUrl(p), alt: o.naslov, loading: "lazy" }))), tile) : null,
     vid,
     adState(o) !== "aktivan" ? h("p", { class: "notice-box" }, adState(o) === "prodano" ? "Ovaj je oglas označen kao prodan." : "Ovaj je oglas istekao i više se ne prikazuje na popisu.") : null,
-    h("p", {}, o.opis), h("p", { class: "by" }, "Objavio: ", authorLink(o.autor)), contact(o),
+    h("p", {}, o.opis), gearLink(o), h("p", { class: "by" }, "Objavio: ", authorLink(o.autor)), contact(o),
     canEdit(o) && o.istjece && adState(o) === "aktivan" ? h("p", { class: "hint" }, "Oglas ističe " + date(o.istjece) + ".") : null,
     h("div", { class: "actions" },
       ...(adState(o) === "aktivan" ? featureBtns("oglasi", o) : []),
@@ -1068,14 +1121,25 @@ const views = {
   },
 
   async oprema(id, alive) {
-    const box = h("div", { class: "stack" }, loading()), list = h("div", { class: "stack" });
-    $("main").replaceChildren(h("a", { class: "back", href: "/ocjene" }, "Natrag na ocjene"), box, list);
+    const box = h("div", { class: "stack" }, loading()), list = h("div", { class: "stack" }), ads = h("div", { class: "stack" });
+    $("main").replaceChildren(h("a", { class: "back", href: "/ocjene" }, "Natrag na ocjene"), box, ads, list);
     const [g] = await q(sb.from("oprema_pregled").select("*").eq("id", id).limit(1));
     if (!g) { if (alive()) box.replaceChildren(emptyBox("Ova oprema više ne postoji", "Vrati se na ocjene.")); return; }
     const rs = await q(sb.from("recenzije").select("*").eq("oprema", id).order("created_at", { ascending: false }));
     await loadNames(rs.map(r => r.autor));
     if (!alive()) return;
     const mine = rs.find(r => r.autor === uid());
+    // Oglasi za ovaj model (ako je pokrenut SQL 24).
+    (async () => {
+      if (!(await hasGearLink())) return;
+      const og = await q(activeAds(sb.from("oglasi").select(OGLAS_JAVNO)).eq("oprema", id).order("created_at", { ascending: false }).limit(20)).catch(() => null);
+      if (!og) return;
+      await loadNames(og.map(o => o.autor)).catch(() => {});
+      if (!alive()) return;
+      ads.replaceChildren(h("h2", {}, og.length ? `Oglasi za ovaj model (${og.length})` : "Oglasi za ovaj model"),
+        og.length ? h("div", { class: "rows" }, og.map(o => adRow(o, "a", "/oglas/" + o.id)))
+          : h("p", { class: "hint" }, "Trenutno nema oglasa za ovaj model. ", h("a", { href: "/oglasi", onclick: e => { e.preventDefault(); if (!needLogin()) oglasForm(); } }, "Prodaješ ga? Objavi oglas.")));
+    })();
     const rate = () => {
       if (needLogin()) return;
       const nums = ["1", "2", "3", "4", "5"];
@@ -1742,6 +1806,7 @@ async function boot() {
   else if (legacy) history.replaceState(null, "", legacy);
   else if (location.search || location.hash) history.replaceState(null, "", location.pathname);
   if (params.get("error_description")) toast("Poveznica nije valjana ili je istekla. Zatraži novu.");
+  hasGearLink().then(ok => { if (ok && !OGLAS_JAVNO.includes(",oprema")) OGLAS_JAVNO += ",oprema"; });
   await loadMe();
   renderAccount();
   updateReportCount().catch(() => {});

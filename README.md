@@ -41,6 +41,7 @@ Tajni ključ (`sb_secret_` ili `service_role`) nikada ne ide u ovaj repozitorij.
 22. Zatim `supabase/21-forum-podkategorije.sql` (podkategorije foruma; ispravak dnevnog ograničenja objava).
 23. Zatim `supabase/22-podkategorije-izmjene.sql` (izmjene podkategorija foruma).
 24. Zatim `supabase/23-oprema-gitare-bas.sql` (ocjene opreme: Gitare / Bas gitare, Gitarske pedale / Gitarska pojačala).
+25. Zatim `supabase/24-oglasi-oprema.sql` (povezivanje oglasa s ocjenama opreme).
 
 ### Zaštita od botova (Cloudflare Turnstile)
 1. Cloudflare → **Turnstile** → **Add widget**, hostname `bisstage.com`, način **Managed**.
