@@ -430,3 +430,30 @@ main.wrap { padding-top: 28px; }
 .home .gear-img { max-height: 220px; }
 /* kartice na dnu fotografije, preko tamne publike, da se bend vidi */
 .hero-cards { justify-content: flex-end; }
+
+/* Rubrike u novom stilu: popisi kao zasebne kartice, filtri u bijelom okviru */
+.rows { background: none; border: 0; border-radius: 0; overflow: visible; gap: 10px; }
+.rows > * + * { border-top: 0; }
+.rows > .row, .rows > details, .rows > a, .rows > article { background: var(--surface); border: 1px solid var(--rule); border-radius: var(--r); box-shadow: var(--shadow); overflow: hidden; }
+.rows > details > .row { background: transparent; }
+.rows > details[open] { border-color: var(--accent); }
+.rows > .row.featured, .rows > details > .row.featured { background: var(--feat-bg); }
+.rows > details:has(.row.featured) { background: var(--feat-bg); border-color: var(--feat-line); }
+a.row:hover, summary.row:hover { background: var(--accent-soft); }
+.tools { background: var(--surface); border: 1px solid var(--rule); border-radius: var(--r); padding: 14px; box-shadow: var(--shadow); }
+.row.thumbed { grid-template-columns: 84px minmax(0, 1fr) auto; }
+.row.thumbed .thumb { width: 84px; height: 84px; }
+.value { font: 800 1.1rem/1.2 var(--display); letter-spacing: -.01em; }
+.value small { font-family: var(--body); }
+.row h3 { font-size: 1.12rem; }
+.head-row h1 { font-size: clamp(2.1rem, 6vw, 3.1rem); }
+.chips { gap: 8px; }
+@media (max-width: 560px) {
+  .row, .row.thumbed, .row.event { grid-template-columns: minmax(0, 1fr); gap: 4px; padding: 14px; }
+  .row.thumbed { grid-template-columns: 72px minmax(0, 1fr); column-gap: 12px; }
+  .row.thumbed .thumb { width: 72px; height: 72px; grid-row: 1 / span 3; }
+  .row.event { grid-template-columns: 52px minmax(0, 1fr); column-gap: 12px; }
+  .row.event .date-tile { grid-row: 1 / span 3; }
+  .row .value, .row.thumbed .value, .row.event .value { grid-column: -2; grid-row: auto; text-align: left; }
+  .tools { padding: 12px; }
+}
