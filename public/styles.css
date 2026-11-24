@@ -464,3 +464,8 @@ a.row:hover, summary.row:hover { background: var(--accent-soft); }
 .video-tile:hover .video-play { transform: scale(1.06); }
 @media (min-width: 721px) { .video-wrap.collapsed { display: none; } }
 @media (max-width: 720px) { .video-tile { display: none; } }
+
+/* Društvene mreže u podnožju */
+.socs { display: inline-flex; gap: 10px; align-items: center; }
+.foot-links a.soc { color: var(--accent); display: inline-flex; padding: 2px; }
+.foot-links a.soc:hover { opacity: .75; }
