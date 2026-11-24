@@ -437,10 +437,18 @@ const gearCard = g => h("a", { class: "gear-card", href: "/oprema/" + g.id }, g.
 const fill = (el, items, emptyEl) => el.replaceChildren(...(items.length ? items : [emptyEl]));
 
 function adBody(o) {
+  // Na računalu je video mala pločica na kraju galerije; klikom se otvara u punoj veličini. Na mobitelu je odmah velik.
+  const vid = o.video ? videoBox(o.video, o.naslov) : null;
+  if (vid) vid.classList.add("collapsed");
+  const tile = vid ? h("button", { type: "button", class: "thumb-btn video-tile", "aria-label": "Pokreni video", onclick: () => {
+    vid.classList.remove("collapsed"); tile.remove();
+    vid.querySelector(".video-start")?.click();
+    vid.scrollIntoView({ behavior: matchMedia("(prefers-reduced-motion: reduce)").matches ? "auto" : "smooth", block: "nearest" });
+  } }, h("span", { class: "video-play", "aria-hidden": "true" }, "▶"), h("span", {}, "Video")) : null;
   return [
-    o.slike?.length ? h("div", { class: "gallery" }, o.slike.map((p, i) => h("button", { type: "button", class: "thumb-btn", "aria-label": `Otvori fotografiju ${i + 1} od ${o.slike.length}`, onclick: () => openGallery(o.slike, i, o.naslov) },
-      h("img", { src: imgUrl(p), alt: o.naslov, loading: "lazy" })))) : null,
-    o.video ? videoBox(o.video, o.naslov) : null,
+    o.slike?.length || tile ? h("div", { class: "gallery" }, (o.slike || []).map((p, i) => h("button", { type: "button", class: "thumb-btn", "aria-label": `Otvori fotografiju ${i + 1} od ${o.slike.length}`, onclick: () => openGallery(o.slike, i, o.naslov) },
+      h("img", { src: imgUrl(p), alt: o.naslov, loading: "lazy" }))), tile) : null,
+    vid,
     adState(o) !== "aktivan" ? h("p", { class: "notice-box" }, adState(o) === "prodano" ? "Ovaj je oglas označen kao prodan." : "Ovaj je oglas istekao i više se ne prikazuje na popisu.") : null,
     h("p", {}, o.opis), h("p", { class: "by" }, "Objavio: ", authorLink(o.autor)), contact(o),
     canEdit(o) && o.istjece && adState(o) === "aktivan" ? h("p", { class: "hint" }, "Oglas ističe " + date(o.istjece) + ".") : null,

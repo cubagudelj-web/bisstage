@@ -457,3 +457,10 @@ a.row:hover, summary.row:hover { background: var(--accent-soft); }
   .row .value, .row.thumbed .value, .row.event .value { grid-column: -2; grid-row: auto; text-align: left; }
   .tools { padding: 12px; }
 }
+/* Video u oglasu: na računalu pločica u galeriji, na mobitelu odmah velik */
+.video-tile { aspect-ratio: 4 / 3; width: 100%; border-radius: var(--r-sm); cursor: pointer; display: grid; place-content: center; justify-items: center; gap: 6px;
+  background: radial-gradient(60% 80% at 50% 40%, rgba(42,47,214,.55), transparent 70%), #0d0e1f; color: #fff; font: 600 .95rem var(--body); }
+.video-tile .video-play { width: 46px; height: 46px; font-size: 1.15rem; }
+.video-tile:hover .video-play { transform: scale(1.06); }
+@media (min-width: 721px) { .video-wrap.collapsed { display: none; } }
+@media (max-width: 720px) { .video-tile { display: none; } }
