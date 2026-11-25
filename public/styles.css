@@ -477,3 +477,14 @@ a.row:hover, summary.row:hover { background: var(--accent-soft); }
 .gear-link-text { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
 .gear-link-text small { color: var(--muted); }
 .gear-link-arrow { margin-left: auto; color: var(--accent); font-weight: 700; }
+
+/* Fotografije u odgovorima na forumu */
+.reply-photo-row { display: flex; flex-wrap: wrap; align-items: center; gap: 10px; }
+.reply-previews { display: flex; flex-wrap: wrap; gap: 8px; flex-basis: 100%; }
+.reply-previews:empty { display: none; }
+.reply-preview { position: relative; width: 84px; height: 84px; }
+.reply-preview img { width: 100%; height: 100%; object-fit: cover; border-radius: var(--r-sm, 12px); border: 1px solid var(--rule); }
+.reply-preview-x { position: absolute; top: -6px; right: -6px; width: 24px; height: 24px; border-radius: 50%; border: 0; background: var(--fg); color: var(--surface); font-size: 16px; line-height: 1; cursor: pointer; }
+.reply-photos { display: grid; grid-template-columns: repeat(auto-fill, minmax(140px, 1fr)); gap: 8px; margin: 8px 0; max-width: 640px; }
+.reply-photo { padding: 0; border: 0; background: none; cursor: zoom-in; aspect-ratio: 4 / 3; border-radius: var(--r-sm, 12px); overflow: hidden; }
+.reply-photo img { width: 100%; height: 100%; object-fit: cover; display: block; }

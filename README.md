@@ -43,6 +43,7 @@ Tajni ključ (`sb_secret_` ili `service_role`) nikada ne ide u ovaj repozitorij.
 24. Zatim `supabase/23-oprema-gitare-bas.sql` (ocjene opreme: Gitare / Bas gitare, Gitarske pedale / Gitarska pojačala).
 25. Zatim `supabase/24-oglasi-oprema.sql` (povezivanje oglasa s ocjenama opreme).
 26. Zatim `supabase/25-iste-kategorije.sql` (iste kategorije u oglasniku i ocjenama, Harmonike i Mikrofoni; uključuje 23).
+27. Zatim `supabase/26-gitare-bas-pojacala-forum-slike.sql` (Akustične/Električne gitare, Bas pojačala, fotografije u odgovorima na forumu; uključuje 23 i 25).
 
 ### Zaštita od botova (Cloudflare Turnstile)
 1. Cloudflare → **Turnstile** → **Add widget**, hostname `bisstage.com`, način **Managed**.

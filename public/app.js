@@ -6,13 +6,17 @@
 const CFG = window.BISSTAGE || {};
 const COUNTRIES = ["Hrvatska", "Slovenija", "Bosna i Hercegovina", "Srbija", "Crna Gora", "Sjeverna Makedonija"];
 // Iste kategorije u Oglasniku i Ocjenama opreme.
-const CATS = ["Gitare", "Bas gitare", "Gitarske pedale", "Gitarska pojačala", "Bubnjevi i udaraljke", "Klavijature", "Harmonike", "Gudački", "Puhački", "Tamburice", "Mikrofoni", "Ozvučenje", "Studijska oprema"];
+const CATS = ["Akustične gitare", "Električne gitare", "Bas gitare", "Gitarske pedale", "Gitarska pojačala", "Bas pojačala", "Bubnjevi i udaraljke", "Klavijature", "Harmonike", "Gudački", "Puhački", "Tamburice", "Mikrofoni", "Ozvučenje", "Studijska oprema"];
 const GEAR_CATS = CATS;
 const BAS_RE = /(bass|\bbas\b|stingray|thunderbird|trbx|\bbb\s?\d{3}|\bsr\s?\d{3})/i;
-const AMP_RE = /(poja[cč]al|\bamp\b|amplifier|combo|katana|spark|\bmg\s?\d|\bhb-10|\bhead\b|blues junior|hot rod|deluxe reverb|twin reverb|\bac\s?\d{1,2}\b|\bdsl\s?\d|\bjcm|mustang|champion|\bcube\b|rumble|frontman|blackstar|orange|laney|bugera|peavey|mesa|engl|ampeg|tone master|nextone|\bthr\s?\d)/i;
-// Stari nazivi kategorija (npr. u starim popisima za uvoz) -> nova kategorija prema nazivu modela.
-const gearCat = (kat, naziv) => kat === "Gitare i basovi" ? (BAS_RE.test(naziv) ? "Bas gitare" : "Gitare")
-  : kat === "Gitarske pedale i pojačala" ? (AMP_RE.test(naziv) ? "Gitarska pojačala" : "Gitarske pedale") : kat;
+const AKUS_RE = /(akusti|acoustic|klasi[cč]n|classical|nylon|najlon|dreadnought|jumbo|parlor|\bd-?\d{2,3}(ce)?\b|\bc40\b|\bcg\s?\d|\bce\b|martin|taylor|cordoba|furch|alhambra|admira|ortega|\blag\b)/i;
+const AMP_RE = /(poja[cč]al|\bamp\b|amplifier|combo|katana|spark|\bmg\s?\d|\bhb-10|\bhead\b|blues junior|hot rod|deluxe reverb|twin reverb|\bac\s?\d{1,2}\b|\bdsl\s?\d|\bjcm|mustang|champion|\bcube\b|rumble|frontman|blackstar|orange|laney|bugera|peavey|mesa|engl|ampeg|tone master|nextone|\bthr\s?\d|markbass|hartke|gallien|\bgk\b|aguilar|trace elliot|\bba-?\d)/i;
+const BASAMP_RE = /(bass|\bbas\b|ampeg|rumble|markbass|hartke|gallien|\bgk\b|aguilar|trace elliot|darkglass|eden|\bba-?\d)/i;
+// Stari nazivi kategorija (stari oglasi prije SQL-a, stari popisi za uvoz) -> nova kategorija prema nazivu.
+const gitara = naziv => AKUS_RE.test(naziv) ? "Akustične gitare" : "Električne gitare";
+const gearCat = (kat, naziv) => kat === "Gitare i basovi" ? (BAS_RE.test(naziv) ? "Bas gitare" : gitara(naziv))
+  : kat === "Gitare" ? gitara(naziv)
+  : kat === "Gitarske pedale i pojačala" ? (AMP_RE.test(naziv) ? (BASAMP_RE.test(naziv) ? "Bas pojačala" : "Gitarska pojačala") : "Gitarske pedale") : kat;
 const CONDS = ["Novo", "Kao novo", "Korišteno", "Za popravak"];
 const CURS = { EUR: "€", KM: "KM", RSD: "RSD", MKD: "MKD" };
 const JOBS = ["Svirka", "Stalni angažman", "Studijsko snimanje", "Poduka", "Bend traži člana"];
@@ -453,6 +457,10 @@ const bars = g => h("div", { class: "bars" }, CRIT.map(([k, l]) => h("div", { cl
 const scoreBox = g => h("div", { class: "score" }, g.broj_ocjena ? dec(g.prosjek) : "–", h("small", {}, plural(g.broj_ocjena || 0, "ocjena", "ocjene", "ocjena")));
 const gearCard = g => h("a", { class: "gear-card", href: "/oprema/" + g.id }, g.slika ? h("img", { class: "gear-img", src: imgUrl(g.slika), alt: "", loading: "lazy" }) : null, scoreBox(g), h("h3", {}, g.naziv), h("div", { class: "meta" }, h("span", {}, g.kategorija)), bars(g));
 const fill = (el, items, emptyEl) => el.replaceChildren(...(items.length ? items : [emptyEl]));
+
+/* Postoji li stupac u bazi (novi stupci rade tek kad se pokrene odgovarajući SQL). */
+const colCache = {};
+const hasColumn = (table, col) => colCache[table + "." + col] ??= sb.from(table).select(col).limit(1).then(({ error }) => !error, () => false);
 
 /* Povezivanje oglasa s ocjenama opreme (stupac oglasi.oprema, SQL 24). */
 let gearLinkOK = null;
@@ -1074,23 +1082,54 @@ const views = {
         authorLink(t.autor), h("span", {}, date(t.created_at))]),
       h("article", { class: "post" }, h("p", { class: "prose" }, t.tekst), h("div", { class: "actions" },
         canMove ? h("button", { class: "btn small quiet", type: "button", onclick: move }, "Premjesti") : null,
-        delBtn(t, async () => { await q(sb.from("teme").delete().eq("id", t.id)); go("/forum"); }), reportBtn("tema", t, "/tema/" + t.id, t.naslov))));
+        delBtn(t, async () => { await removeSlike(rs.flatMap(r => r.slike || [])); await q(sb.from("teme").delete().eq("id", t.id)); go("/forum"); }), reportBtn("tema", t, "/tema/" + t.id, t.naslov))));
     let form;
+    const slikeOK = await hasColumn("odgovori", "slike");
     if (session) {
       const ta = h("textarea", { id: "reply-text", required: true, maxlength: 3000 });
       const err = h("p", { class: "err", role: "alert" });
       const send = h("button", { class: "btn", type: "submit" }, "Odgovori");
+      let files = [];
+      const previews = h("div", { class: "reply-previews" });
+      const showFiles = () => previews.replaceChildren(...files.map((f, i) => {
+        const url = URL.createObjectURL(f);
+        return h("div", { class: "reply-preview" }, h("img", { src: url, alt: "", onload: () => URL.revokeObjectURL(url) }),
+          h("button", { type: "button", class: "reply-preview-x", "aria-label": "Ukloni fotografiju", onclick: () => { files.splice(i, 1); showFiles(); } }, "×"));
+      }));
+      const pick = h("input", { type: "file", id: "reply-slike", accept: "image/*", multiple: true, class: "sr-only", onchange: e => {
+        const all = [...files, ...e.target.files]; e.target.value = "";
+        if (all.length > 4) toast("Najviše 4 fotografije po odgovoru");
+        files = all.slice(0, 4);
+        showFiles();
+      } });
+      const photoRow = slikeOK ? h("div", { class: "reply-photo-row" }, pick,
+        h("label", { class: "btn small quiet", for: "reply-slike" }, "📷 Dodaj fotografije"), h("span", { class: "hint" }, "Najviše 4"), previews) : null;
       form = h("form", { class: "reply", onsubmit: async e => {
         e.preventDefault(); send.disabled = true; err.textContent = "";
-        try { await q(sb.from("odgovori").insert({ tema: id, tekst: ta.value.trim() })); toast("Odgovor je objavljen"); refresh(); }
-        catch (x) { err.textContent = errText(x); send.disabled = false; }
-      } }, h("label", { class: "field", for: "reply-text" }, "Tvoj odgovor", ta), err, h("div", {}, send));
+        let paths = [];
+        try {
+          const row = { tema: id, tekst: ta.value.trim() };
+          if (files.length) {
+            row.id = crypto.randomUUID();
+            for (const f of files) {
+              const path = `${uid()}/forum/${row.id}/${crypto.randomUUID()}.jpg`;
+              await q(sb.storage.from("slike").upload(path, await shrink(f), { contentType: "image/jpeg", upsert: false }));
+              paths.push(path);
+            }
+            row.slike = paths;
+          }
+          await q(sb.from("odgovori").insert(row)); toast("Odgovor je objavljen"); refresh();
+        }
+        catch (x) { await removeSlike(paths); err.textContent = errText(x); send.disabled = false; }
+      } }, h("label", { class: "field", for: "reply-text" }, "Tvoj odgovor", ta), photoRow, err, h("div", {}, send));
     } else {
       form = h("p", {}, h("a", { href: "/prijava", onclick: () => { try { sessionStorage.setItem("povratak", location.pathname); } catch {} } }, "Prijavi se"), " da odgovoriš.");
     }
     list.replaceChildren(h("h2", {}, plural(rs.length, "odgovor", "odgovora", "odgovora")),
       ...rs.map(r => h("article", { class: "post" }, h("div", { class: "meta" }, authorLink(r.autor), h("span", {}, date(r.created_at))), h("p", { class: "prose" }, r.tekst),
-        h("div", { class: "actions" }, delBtn(r, () => q(sb.from("odgovori").delete().eq("id", r.id))), reportBtn("odgovor", r, "/tema/" + t.id, "Odgovor u temi: " + t.naslov)))), form);
+        r.slike?.length ? h("div", { class: "reply-photos" }, r.slike.map((p, i) => h("button", { type: "button", class: "reply-photo", "aria-label": `Otvori fotografiju ${i + 1}`, onclick: () => openGallery(r.slike, i, "Fotografija u odgovoru") },
+          h("img", { src: imgUrl(p), alt: "", loading: "lazy" })))) : null,
+        h("div", { class: "actions" }, delBtn(r, async () => { await removeSlike(r.slike); await q(sb.from("odgovori").delete().eq("id", r.id)); }), reportBtn("odgovor", r, "/tema/" + t.id, "Odgovor u temi: " + t.naslov)))), form);
   },
 
   async ocjene(_, alive) {
@@ -1274,7 +1313,7 @@ const views = {
   async "uvoz-opreme"(_, alive) {
     if (!me?.admin) { go("/"); return; }
     const norm = t => String(t || "").trim().toLowerCase().replace(/ž/g, "z").replace(/[čć]/g, "c").replace(/š/g, "s").replace(/đ/g, "d").replace(/\s+/g, " ");
-    const katOf = Object.fromEntries([...GEAR_CATS, "Gitare i basovi", "Gitarske pedale i pojačala"].map(c => [norm(c), c]));
+    const katOf = Object.fromEntries([...GEAR_CATS, "Gitare", "Gitare i basovi", "Gitarske pedale i pojačala"].map(c => [norm(c), c]));
     const ta = h("textarea", { id: "uvoz-oprema", rows: 12, spellcheck: "false",
       placeholder: "Klavijature;Yamaha P-45\nStudijska oprema;Focusrite Scarlett 2i2 4th Gen\n\nMože i cijela tablica kopirana iz dokumenta (Kategorija, Model, Vrsta)." });
     const zadana = h("select", { id: "uvoz-oprema-kat" }, h("option", { value: "" }, "Nema (svaki red ima kategoriju)"), GEAR_CATS.map(c => h("option", { value: c }, c)));
@@ -1652,7 +1691,8 @@ function deleteAccount() {
         q(sb.from("oprema").select("slika").eq("autor", uid())),
         q(sb.from("dogadaji").select("plakat").eq("autor", uid())),
       ]);
-      const paths = [...og.flatMap(o => o.slike || []), ...op.map(o => o.slika), ...ev.map(e => e.plakat), me?.slika].filter(Boolean);
+      const od = (await hasColumn("odgovori", "slike")) ? await q(sb.from("odgovori").select("slike").eq("autor", uid())) : [];
+      const paths = [...og.flatMap(o => o.slike || []), ...op.map(o => o.slika), ...ev.map(e => e.plakat), ...od.flatMap(o => o.slike || []), me?.slika].filter(Boolean);
       for (let i = 0; i < paths.length; i += 100) await removeSlike(paths.slice(i, i + 100));
       await q(sb.rpc("obrisi_racun"));
       await sb.auth.signOut();
