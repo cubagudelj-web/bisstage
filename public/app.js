@@ -504,6 +504,22 @@ function gearLink(o) {
   return box;
 }
 
+/* Karta mjesta događaja: Google karte se učitavaju tek na klik (kolačići trećih strana). */
+function eventMap(e) {
+  const addr = [e.mjesto, e.grad, e.drzava].filter(Boolean).join(", ");
+  const open = "https://www.google.com/maps/search/?api=1&query=" + encodeURIComponent(addr);
+  const box = h("div", { class: "map-box" });
+  const show = () => box.replaceChildren(h("iframe", { class: "map-frame", title: "Karta: " + addr, loading: "lazy", referrerpolicy: "no-referrer-when-downgrade",
+    src: "https://www.google.com/maps?q=" + encodeURIComponent(addr) + "&hl=hr&z=15&output=embed" }));
+  box.append(h("button", { type: "button", class: "map-cover", onclick: show },
+    h("span", { class: "map-pin", "aria-hidden": "true" }, "📍"),
+    h("b", {}, "Prikaži kartu"),
+    h("small", {}, addr),
+    h("small", { class: "map-note" }, "Karta se učitava s Google karata tek kad klikneš.")));
+  return h("section", { class: "map-section" }, h("h2", {}, "Kako doći"), box,
+    h("a", { class: "map-link", href: open, target: "_blank", rel: "noopener" }, "Otvori u Google kartama ↗"));
+}
+
 function adBody(o) {
   // Na računalu je video mala pločica na kraju galerije; klikom se otvara u punoj veličini. Na mobitelu je odmah velik.
   const vid = o.video ? videoBox(o.video, o.naslov) : null;
@@ -973,6 +989,7 @@ const views = {
           e.kalendar ? h("p", { class: "hint" }, "Događaj je preuzet iz organizatorova javnog kalendara. Provjeri pojedinosti kod organizatora.") : null,
           e.poveznica ? h("div", {}, h("a", { class: "btn", href: e.poveznica, target: "_blank", rel: "noopener nofollow ugc" }, "Ulaznice i više informacija")) : null,
           h("p", { class: "prose" }, e.opis),
+          eventMap(e),
           past ? null : h("div", { class: "actions" }, ...calLinks(e)),
           h("div", { class: "actions" },
             canEdit(e) ? h("button", { class: "btn small quiet", type: "button", onclick: () => eventForm(e) }, "Uredi") : null,

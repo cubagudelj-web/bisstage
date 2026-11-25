@@ -488,3 +488,18 @@ a.row:hover, summary.row:hover { background: var(--accent-soft); }
 .reply-photos { display: grid; grid-template-columns: repeat(auto-fill, minmax(140px, 1fr)); gap: 8px; margin: 8px 0; max-width: 640px; }
 .reply-photo { padding: 0; border: 0; background: none; cursor: zoom-in; aspect-ratio: 4 / 3; border-radius: var(--r-sm, 12px); overflow: hidden; }
 .reply-photo img { width: 100%; height: 100%; object-fit: cover; display: block; }
+
+/* Karta na stranici događaja */
+.map-section { display: flex; flex-direction: column; gap: 10px; }
+.map-section h2 { margin: 8px 0 0; }
+.map-box { border-radius: var(--r, 18px); overflow: hidden; border: 1px solid var(--rule); background: var(--accent-soft); aspect-ratio: 16 / 9; max-height: 380px; width: 100%; }
+.map-frame { width: 100%; height: 100%; border: 0; display: block; }
+.map-cover { width: 100%; height: 100%; border: 0; cursor: pointer; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 6px; padding: 16px; text-align: center; color: var(--fg); font: inherit;
+  background: radial-gradient(circle at 30% 30%, rgba(42, 47, 214, .12), transparent 60%), repeating-linear-gradient(45deg, transparent 0 22px, rgba(42, 47, 214, .05) 22px 23px), var(--accent-soft); }
+.map-cover:hover b { text-decoration: underline; }
+.map-pin { font-size: 2rem; }
+.map-cover b { font-size: 1.1rem; color: var(--accent); }
+.map-cover small { color: var(--muted); }
+.map-note { font-size: .8rem; }
+.map-link { align-self: flex-start; }
+@media (max-width: 560px) { .map-box { aspect-ratio: 4 / 3; } }
