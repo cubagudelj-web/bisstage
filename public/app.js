@@ -1220,9 +1220,17 @@ const views = {
             await q(sb.from("oprema").update({ slika: path }).eq("id", g.id));
             await removeSlike(g.slika ? [g.slika] : []);
           } }) }, g.slika ? "Promijeni fotografiju" : "Dodaj fotografiju") : null,
-        canEdit(g) || me?.admin ? h("button", { class: "btn small quiet", type: "button", onclick: () => openForm({ title: "Promijeni kategoriju", submit: "Spremi", done: "Kategorija je promijenjena",
-          values: { kategorija: GEAR_CATS.includes(g.kategorija) ? g.kategorija : "" }, fields: [{ name: "kategorija", label: "Kategorija", options: GEAR_CATS, required: true }],
-          save: v => q(sb.from("oprema").update({ kategorija: v.kategorija }).eq("id", g.id)) }) }, "Promijeni kategoriju") : null,
+        canEdit(g) || me?.admin ? h("button", { class: "btn small quiet", type: "button", onclick: () => openForm({ title: "Uredi opremu", submit: "Spremi", done: "Promjene su spremljene",
+          values: { naziv: g.naziv, kategorija: GEAR_CATS.includes(g.kategorija) ? g.kategorija : gearCat(g.kategorija, g.naziv) },
+          fields: [{ name: "naziv", label: "Naziv (proizvođač i model)", required: true, max: 90, min_len: 2 }, { name: "kategorija", label: "Kategorija", options: GEAR_CATS, required: true }],
+          save: async v => {
+            const row = { kategorija: v.kategorija }, naziv = v.naziv.replace(/\s+/g, " ").trim();
+            if (naziv !== g.naziv) row.naziv = naziv;
+            try {
+              const r = await q(sb.from("oprema").update(row).eq("id", g.id).select("id"));
+              if (!r.length) throw new UserError("Ne možeš mijenjati ovu opremu.");
+            } catch (e) { if (e?.code === "23505") throw new UserError("Oprema s tim nazivom već postoji. Pronađi je na popisu."); throw e; }
+          } }) }, "Uredi") : null,
         delBtn(g, async () => { await removeSlike(g.slika ? [g.slika] : []); await q(sb.from("oprema").delete().eq("id", g.id)); go("/ocjene"); }), reportBtn("oprema", g, "/oprema/" + g.id, g.naziv))));
     list.replaceChildren(h("h2", {}, "Iskustva korisnika"),
       ...(rs.length ? rs.map(r => h("article", { class: "post" },
